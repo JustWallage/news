@@ -78,12 +78,8 @@ resource "cloudflare_zero_trust_access_application" "news" {
   }]
 }
 
-# --- Custom domain ---
-resource "cloudflare_workers_custom_domain" "news" {
-  count = local.custom_domain_active ? 1 : 0
-
-  account_id = var.cloudflare_account_id
-  zone_id    = var.custom_domain_zone_id
-  hostname   = var.custom_domain
-  service    = "news"
-}
+# NOTE: the Workers custom domain (news.justwallage.nl → the worker) is created
+# by wrangler at deploy time, NOT here. Terraform runs before the worker exists,
+# so a cloudflare_workers_custom_domain resource 404s on the first deploy. See
+# wrangler.jsonc (production env `routes`). This Access app only guards the
+# hostname and has no dependency on the worker.

@@ -54,9 +54,12 @@ deployment pipeline:
 3. **Cron triggers** added to wrangler.jsonc; a `scheduled` handler is exported
    alongside the Hono `fetch` handler.
 4. **Domain + Access activate immediately.** The `justwallage.nl` zone already
-   exists, so unlike stelplaats (which deferred the domain) Terraform creates
-   the custom domain and the self-hosted Access app from the first deploy. There
-   is no interim "enable Access on workers.dev" manual step.
+   exists, so unlike stelplaats (which deferred the domain) the app comes up on
+   the custom domain behind Access from the first deploy. Terraform creates the
+   self-hosted Access app; the Workers **custom domain is created by wrangler**
+   (production `routes`), because Terraform runs before the worker exists and a
+   `cloudflare_workers_custom_domain` would 404 on the first run. No interim
+   "enable Access on workers.dev" manual step.
 5. `ALLOWED_EMAILS = "just@wallage.nl"` (single user).
 
 ## Architecture
@@ -242,8 +245,9 @@ Unit tests call `runDigest` with fakes directly.
 - Logout link in the UI → `/cdn-cgi/access/logout`.
 - Terraform (`iac/main.tf`): reuse the Google IdP; create one self-hosted Access
   application on `news.justwallage.nl` with a single allow policy for
-  `just@wallage.nl`; create the Workers custom domain. All gated on
-  `custom_domain_zone_id`, which IS supplied from day one.
+  `just@wallage.nl` (gated on `custom_domain_zone_id`, supplied from day one).
+  The Workers custom domain is created by wrangler at deploy (production
+  `routes`), not Terraform — see the deployment notes.
 
 ## Deployment — identical pipeline
 

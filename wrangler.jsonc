@@ -51,6 +51,10 @@
       "ai": {
         "binding": "AI",
       },
+      // The custom domain is created here (by wrangler at deploy time, when the
+      // worker exists) rather than in Terraform, which runs before the worker.
+      // Terraform still owns the Cloudflare Access app that guards this hostname.
+      "routes": [{ "pattern": "news.justwallage.nl", "custom_domain": true }],
       "triggers": {
         "crons": ["20 4 * * *", "20 5 * * *"],
       },
