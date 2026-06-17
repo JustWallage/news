@@ -1,12 +1,14 @@
 import { env } from "cloudflare:workers";
+import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { curations, preferences, stories } from "../../db/schema";
+import { curations, preferences, stories, telegram } from "../../db/schema";
 import { getDb } from "./db";
 import type { AiFilter, StoryInput } from "./digest";
 import { fakeAiFilter } from "./fakes";
 import type { HnClient } from "./hn";
-import { sendDailyDigest } from "./scheduled";
+import { runTelegramDigests, sendDailyDigest } from "./scheduled";
 import type { TelegramClient } from "./telegram";
+import { amsterdamMinuteOfDay } from "./time";
 
 const USER = "just@wallage.nl";
 const CHAT = 4242;
@@ -58,6 +60,7 @@ beforeEach(async () => {
   await db.delete(curations);
   await db.delete(stories);
   await db.delete(preferences);
+  await db.delete(telegram);
 });
 
 describe("sendDailyDigest", () => {
@@ -82,5 +85,36 @@ describe("sendDailyDigest", () => {
     expect(rec.sent[0]?.text).toContain("Rust rocks");
     expect(rec.sent[0]?.text).not.toContain("Bitcoin");
     expect(rec.sent[0]?.text).toContain(APP);
+  });
+});
+
+describe("runTelegramDigests", () => {
+  const now = new Date("2026-06-17T06:05:00Z"); // 08:05 Amsterdam
+  const minute = amsterdamMinuteOfDay(now);
+
+  it("runs the digest only when a slot matches the current minute", async () => {
+    const db = getDb(env);
+    await db
+      .insert(telegram)
+      .values({ userEmail: USER, chatId: CHAT, slot1: minute + 5 });
+
+    await runTelegramDigests(env, now);
+    expect(await db.select().from(stories)).toHaveLength(0);
+
+    await db
+      .update(telegram)
+      .set({ slot1: minute })
+      .where(eq(telegram.userEmail, USER));
+    await runTelegramDigests(env, now);
+    expect((await db.select().from(stories)).length).toBeGreaterThan(0);
+  });
+
+  it("does nothing when the chat is not linked", async () => {
+    const db = getDb(env);
+    await db
+      .insert(telegram)
+      .values({ userEmail: USER, chatId: null, slot1: minute });
+    await runTelegramDigests(env, now);
+    expect(await db.select().from(stories)).toHaveLength(0);
   });
 });

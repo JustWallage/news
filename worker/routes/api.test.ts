@@ -121,12 +121,19 @@ describe("api", () => {
       message: { chat: { id: 777 }, text: `/start ${minted.code}` },
     };
 
-    const denied = await app.request(
+    const wrong = await app.request(
       "/telegram/webhook",
       webhook("wrong", update),
       env,
     );
-    expect(denied.status).toBe(403);
+    expect(wrong.status).toBe(403);
+
+    const missing = await app.request(
+      "/telegram/webhook",
+      webhook(null, update),
+      env,
+    );
+    expect(missing.status).toBe(403);
 
     const ok = await app.request(
       "/telegram/webhook",

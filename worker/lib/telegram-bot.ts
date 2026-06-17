@@ -158,11 +158,17 @@ async function curPreferences(db: Db, userEmail: string): Promise<string> {
   return text.trim() === "" ? "No preferences set yet." : text;
 }
 
-const SLOT_SETTERS = [
-  (value: number | null) => ({ slot1: value }),
-  (value: number | null) => ({ slot2: value }),
-  (value: number | null) => ({ slot3: value }),
-];
+function slotValue(row: TelegramRow, index: number): number | null {
+  return index === 0 ? row.slot1 : index === 1 ? row.slot2 : row.slot3;
+}
+
+function slotPatch(index: number, value: number | null) {
+  return index === 0
+    ? { slot1: value }
+    : index === 1
+      ? { slot2: value }
+      : { slot3: value };
+}
 
 async function setSlot(
   db: Db,
@@ -173,8 +179,8 @@ async function setSlot(
   const label = `Daily summary ${index + 1}`;
   const command = index === 0 ? "/daily-time" : `/daily-time-${index + 1}`;
   if (arg === "") {
-    const current = [row.slot1, row.slot2, row.slot3][index];
-    return current === null || current === undefined
+    const current = slotValue(row, index);
+    return current === null
       ? `${label} is not set. Use ${command} HH:MM.`
       : `${label} is set to ${formatMinuteOfDay(current)}. Send "${command} off" to clear.`;
   }
@@ -185,7 +191,7 @@ async function setSlot(
   const value = parsed === "off" ? null : parsed;
   await db
     .update(telegram)
-    .set(SLOT_SETTERS[index]?.(value) ?? {})
+    .set(slotPatch(index, value))
     .where(eq(telegram.userEmail, row.userEmail));
   return value === null
     ? `${label} cleared.`
