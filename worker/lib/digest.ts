@@ -30,9 +30,8 @@ export interface AiFilter {
 const UNFILTERED_FALLBACK = 30;
 
 // D1 caps a query at 100 bound parameters, so multi-row inserts are chunked to
-// stay under it: stories have 8 columns, curations 7 → 10 rows/insert is safe.
+// stay under it: stories have 8 columns, curations 9 → 10 rows/insert is safe.
 const STORY_CHUNK = 10;
-// Curations now carry 9 bound columns per row, so 10 rows stay under the cap.
 const CURATION_CHUNK = 10;
 
 function chunk<T>(items: T[], size: number): T[][] {
