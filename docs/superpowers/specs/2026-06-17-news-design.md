@@ -48,9 +48,10 @@ deployment pipeline:
 1. **No Durable Object / WebSocket.** This is a once-a-day read app; there is
    nothing to push live. Drop `worker/do/`, `WEBSOCKET_DO`, the `/api/ws` route,
    `WebSocketContext`, and the DO migration from wrangler.jsonc.
-2. **Workers AI binding** `AI` added to wrangler.jsonc (production env only, so
-   local/e2e never open a remote AI connection); surfaced by `pnpm cf-typegen`
-   and therefore optional on the base `Env` (narrowed before use).
+2. **Workers AI binding** `AI` added to wrangler.jsonc in local + production (NOT
+   e2e, so the hermetic e2e path and the unit-test pool never open a remote AI
+   connection); surfaced by `pnpm cf-typegen` and therefore optional on the base
+   `Env` (narrowed before use).
 3. **Cron triggers** added to wrangler.jsonc; a `scheduled` handler is exported
    alongside the Hono `fetch` handler.
 4. **Domain + Access activate immediately.** The `justwallage.nl` zone already
@@ -156,9 +157,11 @@ exactly once at 06:20 NL year-round:
 **Steps (`worker/lib/digest.ts` `runDigest(db, deps, prefs, userEmail, now)`):**
 
 1. Fetch the front page in ONE request via the Algolia HN API
-   (`?tags=front_page&hitsPerPage=100`), which returns up to 100 stories with full
-   content (title, url, author, points, num_comments, created_at). This avoids
-   the firebase 1-id-then-N-item pattern that blew the Workers subrequest limit.
+   (`search?tags=front_page,story&hitsPerPage=50`) — front-page STORIES only (the
+   `story` tag drops job posts), with full content (title, url, author, points,
+   num_comments, created_at). The front_page tag keeps a stale tail of
+   recently-front-paged items, so `realHnClient` drops anything older than 5 days.
+   This avoids the firebase 1-id-then-N-item pattern that blew the subrequest limit.
 2. Upsert all of them into the `stories` cache via chunked multi-row upserts
    (refreshing content + `fetchedAt`).
 3. Load the preferences text. If empty, select the top 30 candidates by score
@@ -223,11 +226,14 @@ export function createDeps(env: Bindings): Deps {
 environments — no `ENVIRONMENT`/`isTest` branch leaks into a handler, and there
 is no test-only route.
 
-**Local + e2e use fakes** (`fakeHnClient` returns a canned story list;
-`fakeAiFilter` marks a story relevant when its title contains a word from the
-prefs). So `pnpm dev` shows realistic data, CI is hermetic, and the first real
-data appears when `POST /api/digest/run` runs on the deployed production worker.
-Unit tests call `runDigest` with fakes directly.
+`createDeps` is `env.ENVIRONMENT === "e2e" || env.AI === undefined → fakes; else
+real`. So **local + production hit real Hacker News + Workers AI** (the AI binding
+is wired in both, so `pnpm dev`/`wrangler dev` debugs the live pipeline) and
+**e2e is hermetic** (`fakeHnClient` returns a canned 100-story list; `fakeAiFilter`
+marks a story relevant when its title contains a word from the prefs). The
+unit-test pool loads the e2e wrangler env (no AI binding) so CI — which has no
+Cloudflare creds — never opens a remote AI connection; route tests use the e2e
+identity and `runDigest` is also called directly with fakes.
 
 ## Prompt design (Llama 70B filter)
 
@@ -276,10 +282,10 @@ GHA secrets (via `scripts/bootstrap.sh`), same set as stelplaats **plus**
   (zone id of `justwallage.nl`).
 
 No manual "enable Access on workers.dev" step (domain+Access are Terraform-managed
-from the first deploy). Because local/e2e use fakes, real data first appears in
-production: after the first pipeline deploy, sign in at `https://news.justwallage.nl`,
-set your preferences, then hit `POST /api/digest/run` once to populate before the
-first 06:20 cron.
+from the first deploy). The deployed worker's first real data appears after you
+sign in at `https://news.justwallage.nl`, set your preferences, then hit
+`POST /api/digest/run` once to populate before the first 06:20 cron. (Local
+`pnpm dev` also hits real HN + Workers AI via your own `wrangler login`.)
 
 ## Testing
 

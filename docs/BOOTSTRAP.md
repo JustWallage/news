@@ -70,8 +70,9 @@ on `https://news.justwallage.nl` behind Cloudflare Access (allowing only
 
 ## 7. First data
 
-Local and e2e use fake Hacker News + Workers AI deps, so real curated stories
-only appear in production. After the first deploy:
+e2e uses fake Hacker News + Workers AI deps; production (and local `pnpm dev`,
+via your own `wrangler login`) hit the real services. To populate production
+after the first deploy:
 
 1. Sign in at `https://news.justwallage.nl` (Google, as just@wallage.nl).
 2. Open **preferences**, write your interests, save.

@@ -2,22 +2,24 @@
 
 ## Bindings (wrangler.jsonc → `pnpm cf-typegen` → global `Env`)
 
-| Binding                             | Type    | Notes                                                                                                                                 |
-| ----------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `DB`                                | D1      | query via `getDb(c.env)` (Drizzle), never raw `env.DB` in routes                                                                      |
-| `AI`                                | Ai      | Workers AI; wired ONLY in the production env, so it is OPTIONAL on `Env` — only `lib/deps.ts` touches it                              |
-| `ENVIRONMENT`                       | var     | `local` / `e2e` / `production`; ANY other value must behave like production for auth (fail closed) and like non-prod for deps (fakes) |
-| `ALLOWED_EMAILS`                    | var     | comma list; the first entry is the cron's digest owner                                                                                |
-| `DEV_USER_EMAIL`, `TEST_AUTH_TOKEN` | secrets | `.dev.vars` locally; per-run secret on e2e workers                                                                                    |
+| Binding                             | Type    | Notes                                                                                                        |
+| ----------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------ |
+| `DB`                                | D1      | query via `getDb(c.env)` (Drizzle), never raw `env.DB` in routes                                             |
+| `AI`                                | Ai      | Workers AI; wired in local + production, NOT e2e — so it is OPTIONAL on `Env`; only `lib/deps.ts` touches it |
+| `ENVIRONMENT`                       | var     | `local` / `e2e` / `production`; unknown values fail closed for auth (production); deps are real unless e2e   |
+| `ALLOWED_EMAILS`                    | var     | comma list; the first entry is the cron's digest owner                                                       |
+| `DEV_USER_EMAIL`, `TEST_AUTH_TOKEN` | secrets | `.dev.vars` locally; per-run secret on e2e workers                                                           |
 
 ## Dependency injection (the ONLY env branch)
 
-`lib/deps.ts` `createDeps(env)` returns `{ hn, ai }` — real (`realHnClient` +
-`makeRealAiFilter(env.AI)`) in production, deterministic fakes (`lib/fakes.ts`)
-everywhere else. `index.ts` sets `c.var.deps` for every `/api/*` request; the
-cron calls `createDeps` directly. Every handler and `runDigest` are
-environment-agnostic — no `ENVIRONMENT`/`isTest` checks leak into logic, and
-there is no test-only route surface.
+`lib/deps.ts` `createDeps(env)` returns `{ hn, ai }` — deterministic fakes
+(`lib/fakes.ts`) for e2e (or any env without the AI binding), real
+(`realHnClient` + `makeRealAiFilter(env.AI)`) otherwise. So **local + production
+hit real Hacker News + Workers AI** (`pnpm dev`/`wrangler dev` exercises the real
+pipeline) and **e2e is hermetic**. `index.ts` sets `c.var.deps` for every
+`/api/*` request; the cron calls `createDeps` directly. Every handler and
+`runDigest` are environment-agnostic — no `ENVIRONMENT`/`isTest` checks leak into
+logic, and there is no test-only route surface.
 
 ## Data model & invariants
 
@@ -29,6 +31,11 @@ there is no test-only route surface.
   `stories` → AI-filter the candidate set → set `current=false` for the user,
   then upsert the selected as `current=true` (preserving `openedAt`). Older
   curations stay as the user's archive; story rows are never deleted.
+- `lib/ai.ts`: Workers AI returns this model's output OpenAI-style
+  (`choices[0].message.content`, a JSON string), NOT `{response}` — `parseVerdicts`
+  handles both. Set `max_tokens` (default ~256 truncates a batch → `finish_reason:
+"length"` → unparseable JSON); batches run concurrently and are kept small so
+  each response fits. `worker/lib/ai.test.ts` pins these shapes.
 - Two platform limits shape the writes: Workers Free caps **subrequests at 50**
   (hence one front-page request, not 1+N item fetches), and D1 caps a query at
   **100 bound parameters** — so the multi-row upserts are CHUNKED
@@ -46,7 +53,9 @@ there is no test-only route surface.
 
 vitest-pool-workers runs these in real workerd with ONE D1 per test FILE (not
 per test) — `beforeEach` clears the shared tables. Migrations are applied by
-`test-setup.ts` via the `TEST_MIGRATIONS` binding from
-`vitest.workers.config.ts`. Call routes as
-`app.request(path, init, { ...env, ENVIRONMENT: "local" })` (named `app` export);
-`ENVIRONMENT=local` makes `createDeps` return the fakes.
+`test-setup.ts` via the `TEST_MIGRATIONS` binding. The pool loads the **e2e
+wrangler env** (`environment: "e2e"` in `vitest.workers.config.ts`) so there is
+NO AI binding — CI has no Cloudflare creds, and this keeps the pool from opening
+a remote Workers AI connection. Route tests therefore use the e2e identity
+(`X-Test-User-Email` + `X-Test-Auth` headers; `createDeps` returns fakes for
+e2e); the auth middleware tests pass explicit env objects (named `app` export).

@@ -67,6 +67,12 @@ export async function runDigest(
 ): Promise<DigestResult> {
   // One request returns the whole front page with content.
   const candidates = await deps.hn.frontPage();
+  const trimmedPrefs = prefsText.trim();
+  console.log(
+    `[digest] user=${userEmail} candidates=${candidates.length} prefs=${
+      trimmedPrefs === "" ? "(empty)" : `${trimmedPrefs.length} chars`
+    }`,
+  );
 
   // Refresh the global content cache (chunked multi-row upserts; D1 100-param cap).
   for (const part of chunk(candidates, STORY_CHUNK)) {
@@ -96,15 +102,14 @@ export async function runDigest(
       });
   }
 
-  const trimmed = prefsText.trim();
   let selected: { storyId: number; relevanceScore: number; reason: string }[];
-  if (trimmed === "") {
+  if (trimmedPrefs === "") {
     selected = [...candidates]
       .sort((a, b) => b.score - a.score)
       .slice(0, UNFILTERED_FALLBACK)
       .map((c) => ({ storyId: c.id, relevanceScore: 0, reason: "" }));
   } else {
-    const verdicts = await deps.ai.select(trimmed, candidates);
+    const verdicts = await deps.ai.select(trimmedPrefs, candidates);
     const known = new Set(candidates.map((c) => c.id));
     selected = verdicts
       .filter((v) => v.relevant && known.has(v.id))
@@ -113,7 +118,11 @@ export async function runDigest(
         relevanceScore: v.score,
         reason: v.reason,
       }));
+    console.log(
+      `[digest] ai verdicts=${verdicts.length} relevant=${selected.length}`,
+    );
   }
+  console.log(`[digest] selected=${selected.length} for user=${userEmail}`);
 
   // Replace this user's current feed: drop everyone out, then upsert the freshly
   // selected stories as current (keeping openedAt on rows that survive). Both are

@@ -26,9 +26,11 @@ pnpm check                       # format, lint, types, knip, jscpd, terraform, 
 pnpm test:e2e                    # Playwright
 ```
 
-Local and e2e use **fake** Hacker News + Workers AI deps (deterministic, no
-network, no cost). Real curated data appears only in production. Seed it from the
-browser console while signed in: `await fetch("/api/digest/run", { method: "POST" })`.
+`pnpm dev` (local) hits the **real** Hacker News + Workers AI (so you can debug
+the live pipeline); the Workers AI binding proxies to the real service, so run
+`wrangler login` first. **e2e is hermetic** — it uses deterministic fakes (canned
+stories + a keyword filter), no network or cost. Trigger a run with the Refresh
+button or `await fetch("/api/digest/run", { method: "POST" })`.
 
 ## Pages
 

@@ -35,6 +35,7 @@ export const storySchema = z.object({
 export type Story = z.infer<typeof storySchema>;
 
 export const storyListSchema = z.object({ stories: z.array(storySchema) });
+export type StoryList = z.infer<typeof storyListSchema>;
 
 // ---- Preferences ----
 

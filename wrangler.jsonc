@@ -10,9 +10,11 @@
   "observability": {
     "enabled": true,
   },
-  // AI is wired only in production: local/e2e use fake deps (so unit tests and
-  // `wrangler dev` never open a remote AI connection). cf-typegen still surfaces
-  // the binding on the base Env because it merges all environments.
+  // AI is wired in local + production so `wrangler dev` hits real Workers AI; the
+  // e2e env omits it (createDeps returns fakes there, and the unit-test pool loads
+  // the e2e env so CI — which has no Cloudflare creds — never opens a remote AI
+  // connection).
+  "ai": { "binding": "AI" },
   "vars": {
     "ENVIRONMENT": "local",
     "ALLOWED_EMAILS": "just@wallage.nl",

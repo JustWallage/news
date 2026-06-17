@@ -10,7 +10,9 @@ export default defineConfig({
       const migrations = await readD1Migrations("db/migrations");
       return {
         main: "./worker/index.ts",
-        wrangler: { configPath: "./wrangler.jsonc" },
+        // Load the e2e env, which omits the AI binding — so the test pool never
+        // opens a remote Workers AI connection (CI has no Cloudflare creds).
+        wrangler: { configPath: "./wrangler.jsonc", environment: "e2e" },
         miniflare: {
           bindings: {
             // Test-only values; auth tests override ENVIRONMENT per request.

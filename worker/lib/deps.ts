@@ -13,9 +13,9 @@ export interface Deps {
 }
 
 export function createDeps(env: Bindings): Deps {
-  if (env.ENVIRONMENT === "production" && env.AI !== undefined) {
-    return { hn: realHnClient, ai: makeRealAiFilter(env.AI) };
+  const ai = env.AI;
+  if (env.ENVIRONMENT === "e2e" || ai === undefined) {
+    return { hn: fakeHnClient, ai: fakeAiFilter };
   }
-  // local + e2e (and any misconfigured env) use deterministic fakes.
-  return { hn: fakeHnClient, ai: fakeAiFilter };
+  return { hn: realHnClient, ai: makeRealAiFilter(ai) };
 }
