@@ -53,6 +53,24 @@ const keywordFilter = (needle: string): AiFilter => ({
     ),
 });
 
+// Records how many stories it was asked to evaluate on each run.
+function countingFilter(needle: string): {
+  ai: AiFilter;
+  seen: number[];
+} {
+  const inner = keywordFilter(needle);
+  const seen: number[] = [];
+  return {
+    seen,
+    ai: {
+      select: (prefs, list) => {
+        seen.push(list.length);
+        return inner.select(prefs, list);
+      },
+    },
+  };
+}
+
 const USER = "just@wallage.nl";
 
 beforeEach(async () => {
@@ -69,6 +87,7 @@ describe("runDigest", () => {
       db,
       { hn: hn.hn, ai: keywordFilter("rust") },
       "rust",
+      1,
       USER,
       new Date(),
     );
@@ -89,6 +108,7 @@ describe("runDigest", () => {
       db,
       { hn: countingHn().hn, ai: keywordFilter("rust") },
       "rust",
+      1,
       USER,
       new Date(),
     );
@@ -102,6 +122,7 @@ describe("runDigest", () => {
       db,
       { hn: bumped, ai: keywordFilter("rust") },
       "rust",
+      1,
       USER,
       new Date(),
     );
@@ -116,6 +137,7 @@ describe("runDigest", () => {
       db,
       { hn: countingHn().hn, ai: keywordFilter("rust") },
       "rust",
+      1,
       USER,
       t0,
     );
@@ -128,6 +150,7 @@ describe("runDigest", () => {
       db,
       { hn: countingHn().hn, ai: keywordFilter("bitcoin") },
       "bitcoin",
+      2,
       USER,
       new Date(t0.getTime() + 2 * 86_400_000),
     );
@@ -152,6 +175,7 @@ describe("runDigest", () => {
       db,
       { hn: countingHn().hn, ai: keywordFilter("rust") },
       "rust",
+      1,
       "a@x.test",
       new Date(),
     );
@@ -159,6 +183,7 @@ describe("runDigest", () => {
       db,
       { hn: countingHn().hn, ai: keywordFilter("bitcoin") },
       "bitcoin",
+      1,
       "b@x.test",
       new Date(),
     );
@@ -188,6 +213,7 @@ describe("runDigest", () => {
         ai: { select: () => Promise.reject(new Error("AI must not run")) },
       },
       "   ",
+      0,
       USER,
       new Date(),
     );
@@ -212,6 +238,7 @@ describe("runDigest", () => {
         ai: keywordFilter("story"),
       },
       "story",
+      1,
       USER,
       new Date(),
     );
@@ -222,5 +249,103 @@ describe("runDigest", () => {
       .from(curations)
       .where(and(eq(curations.userEmail, USER), eq(curations.current, true)));
     expect(feed.length).toBe(25);
+  });
+
+  it("skips stories already evaluated at the current preference version", async () => {
+    const db = getDb(env);
+    const first = countingFilter("rust");
+    await runDigest(
+      db,
+      { hn: countingHn().hn, ai: first.ai },
+      "rust",
+      1,
+      USER,
+      new Date(),
+    );
+    expect(first.seen).toEqual([2]);
+
+    // Same version + same front page → nothing is re-sent to the AI (the Rust
+    // verdict AND the non-relevant Bitcoin verdict are both reused).
+    const second = countingFilter("rust");
+    await runDigest(
+      db,
+      { hn: countingHn().hn, ai: second.ai },
+      "rust",
+      1,
+      USER,
+      new Date(),
+    );
+    expect(second.seen).toEqual([0]);
+
+    const feed = await db
+      .select()
+      .from(curations)
+      .where(and(eq(curations.userEmail, USER), eq(curations.current, true)));
+    expect(feed.map((c) => c.storyId)).toEqual([1]);
+  });
+
+  it("re-evaluates every front-page story after a version bump", async () => {
+    const db = getDb(env);
+    await runDigest(
+      db,
+      { hn: countingHn().hn, ai: keywordFilter("rust") },
+      "rust",
+      1,
+      USER,
+      new Date(),
+    );
+    const next = countingFilter("rust");
+    await runDigest(
+      db,
+      { hn: countingHn().hn, ai: next.ai },
+      "rust",
+      2,
+      USER,
+      new Date(),
+    );
+    expect(next.seen).toEqual([2]);
+  });
+
+  it("evaluates only newly appeared stories at the same version", async () => {
+    const db = getDb(env);
+    await runDigest(
+      db,
+      { hn: countingHn().hn, ai: keywordFilter("rust") },
+      "rust",
+      1,
+      USER,
+      new Date(),
+    );
+    const withNew: HnClient = {
+      frontPage: () =>
+        Promise.resolve([
+          ...FRONT,
+          {
+            id: 3,
+            title: "Rust tooling roundup",
+            url: "https://e.com/r2",
+            by: "carol",
+            score: 70,
+            comments: 3,
+            time: 1700000200,
+          },
+        ]),
+    };
+    const counter = countingFilter("rust");
+    await runDigest(
+      db,
+      { hn: withNew, ai: counter.ai },
+      "rust",
+      1,
+      USER,
+      new Date(),
+    );
+    expect(counter.seen).toEqual([1]);
+
+    const feed = await db
+      .select()
+      .from(curations)
+      .where(and(eq(curations.userEmail, USER), eq(curations.current, true)));
+    expect(feed.map((c) => c.storyId).sort((a, b) => a - b)).toEqual([1, 3]);
   });
 });

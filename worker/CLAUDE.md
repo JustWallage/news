@@ -24,13 +24,24 @@ logic, and there is no test-only route surface.
 ## Data model & invariants
 
 - `stories` is a GLOBAL, persistent content cache keyed by HN id. `curations`
-  is PER-USER (`PK (userEmail, storyId)`): which cached stories were selected
-  for a user and whether they are in that user's CURRENT feed (`current` flag).
-- `runDigest(db, deps, prefs, userEmail, now)` (`lib/digest.ts`): fetch the
-  whole front page in ONE request (`hn.frontPage()` → Algolia) → upsert all into
-  `stories` → AI-filter the candidate set → set `current=false` for the user,
-  then upsert the selected as `current=true` (preserving `openedAt`). Older
-  curations stay as the user's archive; story rows are never deleted.
+  is PER-USER (`PK (userEmail, storyId)`): the AI verdict for a story plus
+  whether it is in that user's CURRENT feed. `current` = live-feed membership,
+  recomputed every run; `relevant` = the sticky verdict; `pref_version` = the
+  `preferences.version` the verdict was produced against. `current = true` iff
+  the story is in the latest front page AND `relevant`.
+- Preference VERSIONING drives an incremental digest: `PUT /api/preferences`
+  bumps `preferences.version` only on a real text change (a no-op resave does
+  not). `runDigest(db, deps, prefsText, prefVersion, userEmail, now)`
+  (`lib/digest.ts`): fetch the whole front page in ONE request
+  (`hn.frontPage()` → Algolia) → upsert all into `stories` → reuse curations
+  already judged at `prefVersion` and AI-filter ONLY the candidates not yet
+  judged at it → set `current=false` for the user, then upsert EVERY evaluated
+  candidate (relevant and not) with `pref_version=prefVersion` and
+  `current=relevant` (preserving `openedAt`). Re-evaluation is scoped to the
+  current front page; older off-front-page curations are never re-evaluated.
+  Empty prefs → AI-free top-30-by-score fallback, always recomputed (no skip).
+  `loadPreferences` returns `{ text, version }`; `count` = relevant candidates.
+  Story rows are never deleted.
 - `lib/ai.ts`: Workers AI returns this model's output OpenAI-style
   (`choices[0].message.content`, a JSON string), NOT `{response}` — `parseVerdicts`
   handles both. Set `max_tokens` (default ~256 truncates a batch → `finish_reason:
@@ -39,8 +50,9 @@ logic, and there is no test-only route surface.
 - Two platform limits shape the writes: Workers Free caps **subrequests at 50**
   (hence one front-page request, not 1+N item fetches), and D1 caps a query at
   **100 bound parameters** — so the multi-row upserts are CHUNKED
-  (`STORY_CHUNK`/`CURATION_CHUNK` = 10 rows; 10×8 < 100). A single giant insert
-  passes miniflare locally but fails on real D1; don't switch back.
+  (`STORY_CHUNK`/`CURATION_CHUNK` = 10 rows; curations now bind 9 cols → 90 < 100).
+  A single giant insert passes miniflare locally but fails on real D1; don't
+  switch back.
 - Feed = `curations` joined to `stories` where `userEmail = me AND current`.
   Identity comes ONLY from `c.get("userEmail")` (set by `middleware/auth.ts`);
   routes never read auth headers.

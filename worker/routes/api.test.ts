@@ -80,4 +80,32 @@ describe("api", () => {
     }>();
     expect(after.stories[0]?.openedAt).not.toBeNull();
   });
+
+  it("re-curates against new preferences after an edit", async () => {
+    interface Feed {
+      stories: { title: string }[];
+    }
+    const titles = async (): Promise<string[]> => {
+      const body = await (
+        await app.request("/api/stories", get, env)
+      ).json<Feed>();
+      return body.stories.map((s) => s.title.toLowerCase());
+    };
+
+    await app.request("/api/preferences", json("PUT", { text: "rust" }), env);
+    await app.request("/api/digest/run", json("POST", {}), env);
+    expect((await titles()).some((t) => t.includes("rust"))).toBe(true);
+    expect((await titles()).some((t) => t.includes("bitcoin"))).toBe(false);
+
+    // Editing the preferences bumps the version, so the next run re-evaluates the
+    // front page against the new text instead of reusing the old verdicts.
+    await app.request(
+      "/api/preferences",
+      json("PUT", { text: "bitcoin" }),
+      env,
+    );
+    await app.request("/api/digest/run", json("POST", {}), env);
+    expect((await titles()).some((t) => t.includes("bitcoin"))).toBe(true);
+    expect((await titles()).some((t) => t.includes("rust"))).toBe(false);
+  });
 });

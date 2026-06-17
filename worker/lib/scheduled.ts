@@ -18,5 +18,5 @@ export async function runScheduledDigest(env: Bindings): Promise<void> {
   }
   const db = getDb(env);
   const prefs = await loadPreferences(db, owner);
-  await runDigest(db, createDeps(env), prefs, owner, now);
+  await runDigest(db, createDeps(env), prefs.text, prefs.version, owner, now);
 }

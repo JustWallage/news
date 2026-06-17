@@ -55,16 +55,18 @@ all three explicitly.
 
 ## Version counter (`worker/routes/preferences.ts`)
 
-Every successful `PUT /api/preferences` bumps the version **atomically** in SQL:
+`PUT /api/preferences` bumps the version only when the text actually changes:
 
-- First insert: `version = 1`.
-- On conflict: `version = preferences.version + 1`, alongside the new `text` and
-  `updatedAt`.
+- No existing row → insert with `version = 1`.
+- Existing row, **text differs** → update `text` + `updatedAt`, set
+  `version = previous + 1`.
+- Existing row, **text identical** → no-op (re-saving the same text neither
+  bumps the version nor triggers a needless re-evaluation; `updatedAt` is left
+  unchanged).
 
-The bump is unconditional (every save increments, even if the text is
-unchanged). This keeps the counter a true atomic increment with no read-back;
-the only cost of re-saving identical text is one extra full re-evaluation on the
-next refresh, which is negligible for a single-user app.
+This requires reading the current row before writing. The single-user, sequential
+nature of the app makes the read-then-write safe (no concurrent writers race the
+counter).
 
 The version is **not** exposed in any API response — it is purely internal state
 driving the digest. `GET /api/preferences` is unchanged (`{ text, updatedAt }`).
@@ -141,8 +143,10 @@ Route (`worker/routes/api.test.ts`):
 
 E2E (`e2e/`):
 
-- Set prefs → Refresh → feed reflects them; change prefs → Refresh → feed
-  reflects the change; Refresh again without editing → feed stays stable.
+- Set prefs to "rust" → Refresh → the Bitcoin story is **not** shown (Rust is).
+  Update prefs to "bitcoin" → Refresh → the Bitcoin story now **is** shown. This
+  exercises the version bump on edit driving re-evaluation of a front-page story
+  that was previously judged non-relevant.
 
 ## Docs
 
