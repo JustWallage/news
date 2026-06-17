@@ -25,12 +25,15 @@ there is no test-only route surface.
   is PER-USER (`PK (userEmail, storyId)`): which cached stories were selected
   for a user and whether they are in that user's CURRENT feed (`current` flag).
 - `runDigest(db, deps, prefs, userEmail, now)` (`lib/digest.ts`): fetch the
-  whole front page in ONE request (`hn.frontPage()` → Algolia) →
-  upsert all into `stories` (a single multi-row upsert) → AI-filter the
-  candidate set → set `current=false` for the user, then upsert the selected as
-  `current=true` (preserving `openedAt`). All writes are single statements so the
-  run stays at ~6 subrequests (Workers Free caps at 50). Older curations stay as
-  the user's archive; story rows are never deleted.
+  whole front page in ONE request (`hn.frontPage()` → Algolia) → upsert all into
+  `stories` → AI-filter the candidate set → set `current=false` for the user,
+  then upsert the selected as `current=true` (preserving `openedAt`). Older
+  curations stay as the user's archive; story rows are never deleted.
+- Two platform limits shape the writes: Workers Free caps **subrequests at 50**
+  (hence one front-page request, not 1+N item fetches), and D1 caps a query at
+  **100 bound parameters** — so the multi-row upserts are CHUNKED
+  (`STORY_CHUNK`/`CURATION_CHUNK` = 10 rows; 10×8 < 100). A single giant insert
+  passes miniflare locally but fails on real D1; don't switch back.
 - Feed = `curations` joined to `stories` where `userEmail = me AND current`.
   Identity comes ONLY from `c.get("userEmail")` (set by `middleware/auth.ts`);
   routes never read auth headers.

@@ -5,7 +5,7 @@ import type { StoryInput } from "./digest";
 // single request — no per-item fetches — which keeps the digest well under the
 // Workers subrequest limit. `tags=front_page` mirrors the HN front page.
 const FRONT_PAGE_URL =
-  "https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=50";
+  "https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=100";
 
 const hitSchema = z.object({
   objectID: z.string(),

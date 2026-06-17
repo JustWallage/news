@@ -5,7 +5,10 @@ import type { HnClient } from "./hn";
 // environment except production (see lib/deps.ts). They make `pnpm dev` show
 // realistic data and let e2e steer the feed purely through the preferences text.
 
-const CANNED: StoryInput[] = [
+// A few featured stories the e2e keyword tests rely on (titles contain the words
+// the tests search for, e.g. "rust"/"bitcoin"). None of the filler titles below
+// contain those words.
+const FEATURED: StoryInput[] = [
   {
     id: 1001,
     title: "Rust's new borrow checker lands",
@@ -61,6 +64,21 @@ const CANNED: StoryInput[] = [
     time: 1700000500,
   },
 ];
+
+// Filler so the fake front page is 100 stories — the same count we fetch from
+// Algolia in one go. This makes the digest's multi-row upserts span many chunks
+// against the real ephemeral D1 in CI e2e (D1 caps a query at 100 bound params).
+const FILLER: StoryInput[] = Array.from({ length: 94 }, (_unused, i) => ({
+  id: 2001 + i,
+  title: `Sample front-page story ${i}`,
+  url: `https://example.com/sample-${i}`,
+  by: `user${i}`,
+  score: 300 - i,
+  comments: i,
+  time: 1700001000 + i,
+}));
+
+const CANNED: StoryInput[] = [...FEATURED, ...FILLER];
 
 export const fakeHnClient: HnClient = {
   frontPage: () => Promise.resolve(CANNED),

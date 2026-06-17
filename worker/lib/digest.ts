@@ -29,6 +29,19 @@ export interface AiFilter {
 
 const UNFILTERED_FALLBACK = 30;
 
+// D1 caps a query at 100 bound parameters, so multi-row inserts are chunked to
+// stay under it: stories have 8 columns, curations 7 → 10 rows/insert is safe.
+const STORY_CHUNK = 10;
+const CURATION_CHUNK = 10;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    out.push(items.slice(i, i + size));
+  }
+  return out;
+}
+
 export async function loadPreferences(
   db: Db,
   userEmail: string,
@@ -55,12 +68,12 @@ export async function runDigest(
   // One request returns the whole front page with content.
   const candidates = await deps.hn.frontPage();
 
-  // Refresh the global content cache in a single multi-row upsert (1 subrequest).
-  if (candidates.length > 0) {
+  // Refresh the global content cache (chunked multi-row upserts; D1 100-param cap).
+  for (const part of chunk(candidates, STORY_CHUNK)) {
     await db
       .insert(stories)
       .values(
-        candidates.map((s) => ({
+        part.map((s) => ({
           id: s.id,
           title: s.title,
           url: s.url,
@@ -109,11 +122,11 @@ export async function runDigest(
     .update(curations)
     .set({ current: false })
     .where(eq(curations.userEmail, userEmail));
-  if (selected.length > 0) {
+  for (const part of chunk(selected, CURATION_CHUNK)) {
     await db
       .insert(curations)
       .values(
-        selected.map((s) => ({
+        part.map((s) => ({
           userEmail,
           storyId: s.storyId,
           relevanceScore: s.relevanceScore,

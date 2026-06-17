@@ -38,3 +38,14 @@ test("curated stories render HN-style with working links", async ({
     /item\?id=1001/,
   );
 });
+
+// The digest fetches 100 stories and caches them all (chunked upserts); with no
+// preferences it then shows the top 30. Both the 100-row stories upsert and the
+// 30-row curations upsert span several chunks against the real ephemeral D1 in
+// CI, where the 100-bound-parameter limit is enforced — so an unchunked insert
+// would fail this test before deploy.
+test("Refresh with no preferences curates the front page", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Refresh" }).click();
+  await expect(page.locator("ol > li")).toHaveCount(30);
+});

@@ -193,4 +193,34 @@ describe("runDigest", () => {
     );
     expect(result.count).toBe(2);
   });
+
+  it("chunks inserts across many stories (D1 100-param cap)", async () => {
+    const db = getDb(env);
+    const many: StoryInput[] = Array.from({ length: 25 }, (_unused, i) => ({
+      id: 100 + i,
+      title: `Story ${i}`,
+      url: `https://e.com/${i}`,
+      by: "author",
+      score: i,
+      comments: 0,
+      time: 1700000000,
+    }));
+    const result = await runDigest(
+      db,
+      {
+        hn: { frontPage: () => Promise.resolve(many) },
+        ai: keywordFilter("story"),
+      },
+      "story",
+      USER,
+      new Date(),
+    );
+    expect(result.count).toBe(25);
+    expect((await db.select().from(stories)).length).toBe(25);
+    const feed = await db
+      .select()
+      .from(curations)
+      .where(and(eq(curations.userEmail, USER), eq(curations.current, true)));
+    expect(feed.length).toBe(25);
+  });
 });

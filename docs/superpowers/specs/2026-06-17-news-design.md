@@ -156,20 +156,23 @@ exactly once at 06:20 NL year-round:
 **Steps (`worker/lib/digest.ts` `runDigest(db, deps, prefs, userEmail, now)`):**
 
 1. Fetch the front page in ONE request via the Algolia HN API
-   (`?tags=front_page&hitsPerPage=50`), which returns ~30 stories with full
+   (`?tags=front_page&hitsPerPage=100`), which returns up to 100 stories with full
    content (title, url, author, points, num_comments, created_at). This avoids
    the firebase 1-id-then-N-item pattern that blew the Workers subrequest limit.
-2. Upsert all of them into the `stories` cache in a single multi-row upsert
+2. Upsert all of them into the `stories` cache via chunked multi-row upserts
    (refreshing content + `fetchedAt`).
 3. Load the preferences text. If empty, select the top 30 candidates by score
    (page never blank). Otherwise batch ~25–30 candidates per Workers AI call to
    `@cf/meta/llama-3.3-70b-instruct-fp8-fast` with a strict "exclude when unsure"
    prompt; keep `relevant === true`.
-4. Replace the user's feed with two single statements: set `current=false` for
-   all of the user's curations, then a multi-row upsert of the selected stories
-   (`current=true`, refreshed `curatedAt`/relevance, preserving `openedAt`).
+4. Replace the user's feed: set `current=false` for all of the user's curations,
+   then chunked multi-row upserts of the selected stories (`current=true`,
+   refreshed `curatedAt`/relevance, preserving `openedAt`).
 
-The whole run is ~6 subrequests, well under the Workers Free plan's 50.
+Two platform limits shape this: Workers Free caps **subrequests at 50** (so one
+front-page request, not 1+N), and D1 caps a query at **100 bound parameters** —
+so the multi-row upserts are chunked to 10 rows (10×8 cols < 100). A single giant
+insert passes miniflare locally but fails on real D1.
 
 **Testability:** see "Service seams & injection" below.
 

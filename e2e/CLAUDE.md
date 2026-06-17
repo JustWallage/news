@@ -22,5 +22,6 @@ Notes:
   **Refresh** button or `POST /api/digest/run`. The fake AI selects a canned
   story when its title contains a word from the prefs text, so prefs steer the
   feed (e.g. prefs "rust" → only the Rust story).
+- Mock 100 stories to hit D1 limits on e2e, thus chucking must work in pipeline test phase on real D1.
 - If you change the schema, delete `.wrangler/` so the local e2e D1 re-migrates;
   a stale local DB surfaces as `/api/*` 500s.
