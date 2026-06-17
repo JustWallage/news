@@ -1,9 +1,12 @@
 # iac/
 
 Terraform owns: prod D1, the Access application + Google IdP (the ONLY place the
-allowed-email lives). Wrangler/CI own: the worker itself, its secrets,
-migrations, the **Workers custom domain** (production `routes` in wrangler.jsonc),
-and all ephemeral e2e resources — never add those to Terraform.
+allowed-email lives), and a path-scoped Access app that **bypasses** Access for
+`/telegram/webhook` (Telegram cannot authenticate; the worker checks a secret
+token instead). Wrangler/CI own: the worker itself, its secrets (including the
+Telegram bot token + webhook secret, set manually — see BOOTSTRAP), migrations,
+the **Workers custom domain** (production `routes` in wrangler.jsonc), and all
+ephemeral e2e resources — never add those to Terraform.
 
 The custom domain is NOT a Terraform resource on purpose: Terraform runs before
 the worker is deployed, so Wrangler creates it at deploy time

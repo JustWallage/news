@@ -51,3 +51,22 @@ export const preferencesUpdateSchema = z.object({
 // ---- Digest ----
 
 export const digestRunResultSchema = z.object({ count: z.int() });
+
+// ---- Telegram ----
+
+export const telegramStatusSchema = z.object({
+  /** Whether a Telegram chat is bound to this account. */
+  linked: z.boolean(),
+  /** The three daily-summary slots as "HH:MM", null when unset. */
+  slots: z.array(z.string().nullable()).length(3),
+});
+export type TelegramStatus = z.infer<typeof telegramStatusSchema>;
+
+export const telegramLinkCodeSchema = z.object({
+  /** One-time code to send the bot as `/start <code>`. */
+  code: z.string(),
+  /** `t.me` deep link, or null when the bot username is not configured. */
+  url: z.string().nullable(),
+  expiresAt: z.iso.datetime(),
+});
+export type TelegramLinkCode = z.infer<typeof telegramLinkCodeSchema>;

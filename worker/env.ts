@@ -6,7 +6,19 @@ import type { Deps } from "./lib/deps";
 // unrecognized value as non-production (fakes), and the auth middleware treats
 // it as production (fail closed), so the type must not pretend the value is
 // always one of the configured literals.
-export type Bindings = Omit<Env, "ENVIRONMENT"> & { ENVIRONMENT: string };
+// TELEGRAM_BOT_TOKEN + TELEGRAM_WEBHOOK_SECRET are secrets (not in wrangler
+// vars), so cf-typegen does not surface them — declare them optional here. Only
+// production sets them; their absence is what flips createDeps to the fake
+// Telegram client and fails the webhook closed.
+// TELEGRAM_BOT_USERNAME is widened to string for the same reason as ENVIRONMENT:
+// the committed var is "" but production carries a real username, so the type
+// must not pretend it is always the empty-string literal.
+export type Bindings = Omit<Env, "ENVIRONMENT" | "TELEGRAM_BOT_USERNAME"> & {
+  ENVIRONMENT: string;
+  TELEGRAM_BOT_USERNAME: string;
+  TELEGRAM_BOT_TOKEN?: string;
+  TELEGRAM_WEBHOOK_SECRET?: string;
+};
 
 export interface AppEnv {
   Bindings: Bindings;

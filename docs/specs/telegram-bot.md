@@ -64,22 +64,22 @@ re-runs the digest and pushes a fresh summary to the chat.
   separately (by `ScheduledController.cron`) to the Telegram delivery path. A
   slot set at ~06:20 may run the digest twice; harmless for a single user.
 - **[AI] `/set-preferences` only stores the text** (mirrors `PUT
-  /api/preferences`); it does not auto-run a digest. The next daily slot (or the
+/api/preferences`); it does not auto-run a digest. The next daily slot (or the
   website Refresh) re-curates.
 
 ## Data model
 
 New table `telegram` (Drizzle, one row per user; PK `userEmail`):
 
-| column              | type                | notes                                          |
-| ------------------- | ------------------- | ---------------------------------------------- |
-| `userEmail`         | text PK             | the account this chat controls                 |
-| `chatId`            | integer nullable    | Telegram chat id; null until linked (unique)   |
-| `linkCode`          | text nullable       | pending one-time link code; null once consumed |
-| `linkCodeExpiresAt` | integer (timestamp) | nullable; expiry of `linkCode`                 |
-| `slot1`             | integer nullable    | daily-summary minute-of-day 0–1439 (mult. of 5)|
-| `slot2`             | integer nullable    | second slot                                    |
-| `slot3`             | integer nullable    | third slot                                     |
+| column              | type                | notes                                           |
+| ------------------- | ------------------- | ----------------------------------------------- |
+| `userEmail`         | text PK             | the account this chat controls                  |
+| `chatId`            | integer nullable    | Telegram chat id; null until linked (unique)    |
+| `linkCode`          | text nullable       | pending one-time link code; null once consumed  |
+| `linkCodeExpiresAt` | integer (timestamp) | nullable; expiry of `linkCode`                  |
+| `slot1`             | integer nullable    | daily-summary minute-of-day 0–1439 (mult. of 5) |
+| `slot2`             | integer nullable    | second slot                                     |
+| `slot3`             | integer nullable    | third slot                                      |
 
 Generated via `pnpm migrate:gen` (new additive migration). A unique index on
 `chatId` (webhook looks chats up by it; `linkCode` lookups are rare and tiny).
@@ -95,10 +95,10 @@ telegramLinkCodeSchema = { code: string, url: string|null, expiresAt: ISO }
 
 ## API (behind auth, under `/api/telegram`)
 
-| method + path                | result                                                  |
-| ---------------------------- | ------------------------------------------------------- |
-| `GET /api/telegram`          | `telegramStatus` for the signed-in user                 |
-| `POST /api/telegram/link-code` | mints a code (15-min expiry), `telegramLinkCode`      |
+| method + path                  | result                                           |
+| ------------------------------ | ------------------------------------------------ |
+| `GET /api/telegram`            | `telegramStatus` for the signed-in user          |
+| `POST /api/telegram/link-code` | mints a code (15-min expiry), `telegramLinkCode` |
 
 ## Webhook (`POST /telegram/webhook`, not under `/api`)
 

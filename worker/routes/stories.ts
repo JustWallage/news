@@ -1,9 +1,9 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { curations, stories } from "../../db/schema";
+import { curations } from "../../db/schema";
 import type { AppEnv } from "../env";
 import { getDb } from "../lib/db";
-import { toStory } from "../lib/serialize";
+import { loadFeed } from "../lib/feed";
 
 export const storiesRoutes = new Hono<AppEnv>();
 
@@ -11,29 +11,7 @@ export const storiesRoutes = new Hono<AppEnv>();
 // content cache, best matches first.
 storiesRoutes.get("/", async (c) => {
   const db = getDb(c.env);
-  const rows = await db
-    .select({
-      id: stories.id,
-      title: stories.title,
-      url: stories.url,
-      by: stories.by,
-      score: stories.score,
-      comments: stories.comments,
-      time: stories.time,
-      relevanceScore: curations.relevanceScore,
-      reason: curations.reason,
-      openedAt: curations.openedAt,
-    })
-    .from(curations)
-    .innerJoin(stories, eq(curations.storyId, stories.id))
-    .where(
-      and(
-        eq(curations.userEmail, c.get("userEmail")),
-        eq(curations.current, true),
-      ),
-    )
-    .orderBy(desc(curations.relevanceScore), desc(stories.score));
-  return c.json({ stories: rows.map(toStory) });
+  return c.json({ stories: await loadFeed(db, c.get("userEmail")) });
 });
 
 // Record the first time the user opens a story; idempotent (later opens no-op).

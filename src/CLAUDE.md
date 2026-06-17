@@ -13,6 +13,9 @@
   (a `dirty` ref), so a background revalidate can't clobber what is being typed.
 - Layout is the plain Hacker-News-style list (orange header, ranked rows). Two
   routes only: `/` (HomePage) and `/preferences` (PreferencesPage).
+- PreferencesPage's `TelegramSection` reads `/api/telegram` status and POSTs
+  `/api/telegram/link-code` to reveal a `/start <code>` connect code; daily
+  times themselves are set from the bot, not the web UI.
 - `components/ui/` is shadcn-generated (Base UI primitives, NOT Radix — pass
   `render={<a />}` plus `nativeButton={false}` for a link-button, not `asChild`).
   It is exempt from lint and knip; regenerate via `pnpm dlx shadcn@latest add`.

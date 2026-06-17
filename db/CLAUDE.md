@@ -20,5 +20,8 @@ Rules:
   re-fetched (Algolia, one request) and upserted on each digest run.
 - `curations` is PER-USER (composite PK `userEmail, storyId`), the feed/archive
   join table; `current` marks the live feed, older rows are the archive.
+- `telegram` is PER-USER (PK `userEmail`, unique `chatId`): the chat link plus
+  the pending one-time `linkCode`/`linkCodeExpiresAt` and three nullable slot
+  columns (daily-summary minute-of-day 0–1439; null = unset).
 - Timestamps are epoch integers via `{ mode: "timestamp" }` (surface as `Date`);
   `current` is a `{ mode: "boolean" }` integer.

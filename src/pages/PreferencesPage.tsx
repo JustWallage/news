@@ -1,4 +1,10 @@
-import { okSchema, preferencesSchema } from "@shared/api";
+import {
+  okSchema,
+  preferencesSchema,
+  telegramLinkCodeSchema,
+  telegramStatusSchema,
+  type TelegramLinkCode,
+} from "@shared/api";
 import { useEffect, useRef, useState } from "react";
 import { useUser } from "@/components/AuthGate";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -6,6 +12,69 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCachedFetch } from "@/hooks/useCachedFetch";
 import { apiFetch, jsonInit } from "@/lib/api";
+
+function TelegramSection() {
+  const { data } = useCachedFetch("/api/telegram", telegramStatusSchema);
+  const [code, setCode] = useState<TelegramLinkCode | null>(null);
+  const [pending, setPending] = useState(false);
+
+  const connect = (): void => {
+    setPending(true);
+    apiFetch(
+      "/api/telegram/link-code",
+      telegramLinkCodeSchema,
+      jsonInit("POST", {}),
+    )
+      .then(setCode)
+      .catch(() => {
+        setCode(null);
+      })
+      .finally(() => {
+        setPending(false);
+      });
+  };
+
+  const slots = data?.slots.filter((s): s is string => s !== null) ?? [];
+
+  return (
+    <div className="space-y-2 border-t pt-4">
+      <Label>Telegram</Label>
+      <p className="text-sm text-muted-foreground">
+        {data?.linked === true
+          ? slots.length > 0
+            ? `Connected. Daily summaries at ${slots.join(", ")}.`
+            : "Connected. Set summary times in the bot with /daily-time."
+          : "Get your summaries in Telegram. Generate a code, then send the bot /start <code>."}
+      </p>
+      <Button variant="outline" onClick={connect} disabled={pending}>
+        {data?.linked === true ? "Reconnect Telegram" : "Connect Telegram"}
+      </Button>
+      {code !== null && (
+        <div className="space-y-1 text-sm">
+          <p>
+            Send the bot{" "}
+            <code className="rounded bg-muted px-1 py-0.5">
+              /start {code.code}
+            </code>
+            {code.url !== null && (
+              <>
+                {" "}
+                or{" "}
+                <a className="underline" href={code.url}>
+                  open the bot
+                </a>
+              </>
+            )}
+            .
+          </p>
+          <p className="text-muted-foreground">
+            This code expires in 15 minutes.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function PreferencesPage() {
   const email = useUser();
@@ -81,6 +150,8 @@ export function PreferencesPage() {
           <span className="text-sm text-destructive">Could not save.</span>
         )}
       </div>
+
+      <TelegramSection />
     </div>
   );
 }
