@@ -4,10 +4,10 @@ A personal, AI-curated Hacker News front page for one user, hosted at
 `news.justwallage.nl` on Cloudflare.
 
 Every morning at 06:20 (Europe/Amsterdam) a cron pulls the Hacker News front
-page (`topstories`, top ~100), filters it through Workers AI (Llama 70B) against
-a plain-text preferences blob, and stores the matches in D1. The site renders
-them like the HN front page — title (link), points, age, comments — and tracks
-which links you've opened.
+page (the Algolia HN API — one request, full content), filters it through
+Workers AI (Llama 70B) against a plain-text preferences blob, and stores the
+matches in D1. The site renders them like the HN front page — title (link),
+points, age, comments — and tracks which links you've opened.
 
 ## Stack
 

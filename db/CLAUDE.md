@@ -16,7 +16,8 @@ Rules:
   (Pre-deploy, the single `0000` was regenerated freely; once shipped, append.)
 - The `meta/` folder is drizzle-kit's snapshot state — commit it, never edit it.
 - `stories` is a GLOBAL content cache keyed by the HN item id; rows are never
-  deleted, and `fetchedAt` drives the 60s incremental re-download.
+  deleted. `fetchedAt` records the last refresh — the whole front page is
+  re-fetched (Algolia, one request) and upserted on each digest run.
 - `curations` is PER-USER (composite PK `userEmail, storyId`), the feed/archive
   join table; `current` marks the live feed, older rows are the archive.
 - Timestamps are epoch integers via `{ mode: "timestamp" }` (surface as `Date`);

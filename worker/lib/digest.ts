@@ -1,9 +1,9 @@
-import { eq, inArray } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { curations, preferences, stories } from "../../db/schema";
 import type { Db } from "./db";
-import type { HnClient, HnItem } from "./hn";
+import type { HnClient } from "./hn";
 
-// Plain shape the AI filter scores.
+// Plain shape of a story — returned by the HN client and scored by the AI filter.
 export interface StoryInput {
   id: number;
   title: string;
@@ -27,51 +27,7 @@ export interface AiFilter {
   select(prefs: string, stories: StoryInput[]): Promise<Verdict[]>;
 }
 
-const TOP_N = 100;
-const ITEM_CONCURRENCY = 8;
 const UNFILTERED_FALLBACK = 30;
-// A cached story is re-downloaded once its content is older than this.
-const STALE_MS = 60_000;
-
-function toStoryInput(item: HnItem): StoryInput | null {
-  if (item.type !== "story" || item.dead === true || item.deleted === true) {
-    return null;
-  }
-  if (item.title === undefined || item.by === undefined) {
-    return null;
-  }
-  return {
-    id: item.id,
-    title: item.title,
-    url: item.url ?? null,
-    by: item.by,
-    score: item.score ?? 0,
-    comments: item.descendants ?? 0,
-    time: item.time ?? 0,
-  };
-}
-
-async function mapLimit<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let cursor = 0;
-  async function worker(): Promise<void> {
-    while (cursor < items.length) {
-      const index = cursor;
-      cursor += 1;
-      const item = items[index];
-      if (item !== undefined) {
-        results[index] = await fn(item);
-      }
-    }
-  }
-  const size = Math.min(limit, items.length);
-  await Promise.all(Array.from({ length: size }, () => worker()));
-  return results;
-}
 
 export async function loadPreferences(
   db: Db,
@@ -85,76 +41,6 @@ export async function loadPreferences(
   return rows[0]?.text ?? "";
 }
 
-// Refresh the global story cache for the top ids: download only the items that
-// are missing or older than STALE_MS, and upsert them. Returns the cached rows
-// turned into AI inputs.
-async function refreshCache(
-  db: Db,
-  hn: HnClient,
-  ids: number[],
-  now: Date,
-): Promise<StoryInput[]> {
-  if (ids.length === 0) {
-    return [];
-  }
-  const existing = await db
-    .select({ id: stories.id, fetchedAt: stories.fetchedAt })
-    .from(stories)
-    .where(inArray(stories.id, ids));
-  const seenAt = new Map(existing.map((row) => [row.id, row.fetchedAt]));
-  const staleBefore = new Date(now.getTime() - STALE_MS);
-  const toFetch = ids.filter((id) => {
-    const fetchedAt = seenAt.get(id);
-    return fetchedAt === undefined || fetchedAt < staleBefore;
-  });
-
-  const fetched = await mapLimit(toFetch, ITEM_CONCURRENCY, (id) =>
-    hn.item(id),
-  );
-  for (const item of fetched) {
-    if (item === null) {
-      continue;
-    }
-    const input = toStoryInput(item);
-    if (input === null) {
-      continue;
-    }
-    await db
-      .insert(stories)
-      .values({
-        id: input.id,
-        title: input.title,
-        url: input.url,
-        by: input.by,
-        score: input.score,
-        comments: input.comments,
-        time: new Date(input.time * 1000),
-        fetchedAt: now,
-      })
-      .onConflictDoUpdate({
-        target: stories.id,
-        set: {
-          title: input.title,
-          url: input.url,
-          score: input.score,
-          comments: input.comments,
-          fetchedAt: now,
-        },
-      });
-  }
-
-  const rows = await db.select().from(stories).where(inArray(stories.id, ids));
-  return rows.map((row) => ({
-    id: row.id,
-    title: row.title,
-    url: row.url,
-    by: row.by,
-    score: row.score,
-    comments: row.comments,
-    time: Math.floor(row.time.getTime() / 1000),
-  }));
-}
-
 export interface DigestResult {
   count: number;
 }
@@ -166,8 +52,36 @@ export async function runDigest(
   userEmail: string,
   now: Date,
 ): Promise<DigestResult> {
-  const ids = (await deps.hn.topStoryIds()).slice(0, TOP_N);
-  const candidates = await refreshCache(db, deps.hn, ids, now);
+  // One request returns the whole front page with content.
+  const candidates = await deps.hn.frontPage();
+
+  // Refresh the global content cache in a single multi-row upsert (1 subrequest).
+  if (candidates.length > 0) {
+    await db
+      .insert(stories)
+      .values(
+        candidates.map((s) => ({
+          id: s.id,
+          title: s.title,
+          url: s.url,
+          by: s.by,
+          score: s.score,
+          comments: s.comments,
+          time: new Date(s.time * 1000),
+          fetchedAt: now,
+        })),
+      )
+      .onConflictDoUpdate({
+        target: stories.id,
+        set: {
+          title: sql`excluded.title`,
+          url: sql`excluded.url`,
+          score: sql`excluded.score`,
+          comments: sql`excluded.comments`,
+          fetchedAt: sql`excluded.fetched_at`,
+        },
+      });
+  }
 
   const trimmed = prefsText.trim();
   let selected: { storyId: number; relevanceScore: number; reason: string }[];
@@ -188,27 +102,35 @@ export async function runDigest(
       }));
   }
 
-  // Replace this user's current feed: drop everyone out, then re-mark the
-  // freshly selected stories (keeping openedAt on rows that survive).
+  // Replace this user's current feed: drop everyone out, then upsert the freshly
+  // selected stories as current (keeping openedAt on rows that survive). Both are
+  // single statements, so the whole run stays at a handful of subrequests.
   await db
     .update(curations)
     .set({ current: false })
     .where(eq(curations.userEmail, userEmail));
-  for (const { storyId, relevanceScore, reason } of selected) {
+  if (selected.length > 0) {
     await db
       .insert(curations)
-      .values({
-        userEmail,
-        storyId,
-        relevanceScore,
-        reason,
-        curatedAt: now,
-        current: true,
-        openedAt: null,
-      })
+      .values(
+        selected.map((s) => ({
+          userEmail,
+          storyId: s.storyId,
+          relevanceScore: s.relevanceScore,
+          reason: s.reason,
+          curatedAt: now,
+          current: true,
+          openedAt: null,
+        })),
+      )
       .onConflictDoUpdate({
         target: [curations.userEmail, curations.storyId],
-        set: { relevanceScore, reason, curatedAt: now, current: true },
+        set: {
+          relevanceScore: sql`excluded.relevance_score`,
+          reason: sql`excluded.reason`,
+          curatedAt: sql`excluded.curated_at`,
+          current: sql`excluded.current`,
+        },
       });
   }
   return { count: selected.length };

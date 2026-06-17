@@ -24,12 +24,13 @@ there is no test-only route surface.
 - `stories` is a GLOBAL, persistent content cache keyed by HN id. `curations`
   is PER-USER (`PK (userEmail, storyId)`): which cached stories were selected
   for a user and whether they are in that user's CURRENT feed (`current` flag).
-- `runDigest(db, deps, prefs, userEmail, now)` (`lib/digest.ts`): fetch top ids
-  → download `item` ONLY for ids missing or with `fetchedAt` older than
-  `STALE_MS` (60s) → upsert into `stories` → AI-filter the full candidate set →
-  set `current=false` for the user, then upsert the selected as `current=true`
-  (preserving `openedAt`). Older curations stay as the user's archive. Never
-  deletes story rows.
+- `runDigest(db, deps, prefs, userEmail, now)` (`lib/digest.ts`): fetch the
+  whole front page in ONE request (`hn.frontPage()` → Algolia) →
+  upsert all into `stories` (a single multi-row upsert) → AI-filter the
+  candidate set → set `current=false` for the user, then upsert the selected as
+  `current=true` (preserving `openedAt`). All writes are single statements so the
+  run stays at ~6 subrequests (Workers Free caps at 50). Older curations stay as
+  the user's archive; story rows are never deleted.
 - Feed = `curations` joined to `stories` where `userEmail = me AND current`.
   Identity comes ONLY from `c.get("userEmail")` (set by `middleware/auth.ts`);
   routes never read auth headers.

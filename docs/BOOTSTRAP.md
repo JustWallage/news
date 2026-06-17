@@ -13,6 +13,9 @@ Cloudflare dashboard → My Profile → API Tokens → Create Token (custom):
 - Account / Access: Apps and Policies / Edit
 - Account / Access: Organizations, Identity Providers, and Groups / Edit
 - Account / Workers AI / Read
+- Zone / Workers Routes / Edit (zone: justwallage.nl) — required so wrangler can
+  attach the `news.justwallage.nl` custom domain at deploy time
+- Zone / Zone / Read (zone: justwallage.nl) — to resolve the zone
 
 Copy the token → `CLOUDFLARE_API_TOKEN`.
 Your account id (dashboard → Workers & Pages, right sidebar) → `CLOUDFLARE_ACCOUNT_ID`.

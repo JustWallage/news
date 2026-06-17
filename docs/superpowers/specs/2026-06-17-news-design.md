@@ -37,8 +37,8 @@ deployment pipeline:
 - **DB:** `db/schema.ts` (Drizzle) + generated SQL migrations applied by
   wrangler (not drizzle-kit).
 - **e2e:** Playwright in `e2e/`, ephemeral worker+D1 per CI run.
-- **IaC:** Terraform in `iac/` with R2-backed state; owns prod D1, the Access
-  app + Google IdP, and the custom domain.
+- **IaC:** Terraform in `iac/` with R2-backed state; owns prod D1 and the Access
+  app + Google IdP (the custom domain is created by wrangler at deploy).
 - **Quality gate:** `pnpm check` (format, lint, types, knip, jscpd, terraform
   fmt/validate, unit tests) as the Husky pre-commit hook. `pnpm dev` full-stack
   dev server; `pnpm test:e2e` Playwright.
@@ -91,19 +91,19 @@ makes e2e tests isolate per user and run in parallel.
 
 ### `stories` (global content cache, PK = HN item id)
 
-| column      | type                | notes                                             |
-| ----------- | ------------------- | ------------------------------------------------- |
-| `id`        | integer PK          | HN item id (NOT autoincrement)                    |
-| `title`     | text not null       |                                                   |
-| `url`       | text nullable       | null for Ask/Show HN self-posts                   |
-| `by`        | text not null       | HN author                                         |
-| `score`     | integer not null    | points (refreshed on re-download)                 |
-| `comments`  | integer not null    | HN `descendants`                                  |
-| `time`      | integer (timestamp) | HN submission time                                |
-| `fetchedAt` | integer (timestamp) | last download; drives the 60s incremental refetch |
+| column      | type                | notes                                                |
+| ----------- | ------------------- | ---------------------------------------------------- |
+| `id`        | integer PK          | HN item id (NOT autoincrement)                       |
+| `title`     | text not null       |                                                      |
+| `url`       | text nullable       | null for Ask/Show HN self-posts                      |
+| `by`        | text not null       | HN author                                            |
+| `score`     | integer not null    | points (refreshed on re-download)                    |
+| `comments`  | integer not null    | HN `descendants`                                     |
+| `time`      | integer (timestamp) | HN submission time                                   |
+| `fetchedAt` | integer (timestamp) | last refresh (the front page is re-fetched each run) |
 
-Rows are never deleted. The digest only downloads `item/<id>` for ids that are
-missing or whose `fetchedAt` is older than 60s.
+Rows are never deleted. Each digest run re-fetches the whole front page in one
+request and upserts the content (refreshing score/comments/`fetchedAt`).
 
 ### `curations` (per-user feed + archive, PK `(userEmail, storyId)`)
 
@@ -155,19 +155,21 @@ exactly once at 06:20 NL year-round:
 
 **Steps (`worker/lib/digest.ts` `runDigest(db, deps, prefs, userEmail, now)`):**
 
-1. Fetch `topstories.json` (500 ids); take the top 100.
-2. Look up which of those ids are already cached in `stories`; download
-   `item/<id>.json` (concurrency-limited, ~8 at a time) ONLY for ids that are
-   missing or whose `fetchedAt` is older than 60s. Upsert fetched items
-   (content + `fetchedAt`); keep `type === "story"`, drop dead/deleted.
-3. Candidates = the cached `stories` rows for the top ids.
-4. Load the preferences text. If empty, skip the AI call and select the top 30
-   candidates by score (page never blank). Otherwise batch ~25–30 candidates per
-   Workers AI call to `@cf/meta/llama-3.3-70b-instruct-fp8-fast` with a strict
-   "exclude when unsure" prompt; keep `relevant === true`.
-5. Replace the user's feed: set `current=false` for all of the user's curations,
-   then upsert each selected story into `curations` (`current=true`, refreshed
-   `curatedAt`/relevance, preserving `openedAt`).
+1. Fetch the front page in ONE request via the Algolia HN API
+   (`?tags=front_page&hitsPerPage=50`), which returns ~30 stories with full
+   content (title, url, author, points, num_comments, created_at). This avoids
+   the firebase 1-id-then-N-item pattern that blew the Workers subrequest limit.
+2. Upsert all of them into the `stories` cache in a single multi-row upsert
+   (refreshing content + `fetchedAt`).
+3. Load the preferences text. If empty, select the top 30 candidates by score
+   (page never blank). Otherwise batch ~25–30 candidates per Workers AI call to
+   `@cf/meta/llama-3.3-70b-instruct-fp8-fast` with a strict "exclude when unsure"
+   prompt; keep `relevant === true`.
+4. Replace the user's feed with two single statements: set `current=false` for
+   all of the user's curations, then a multi-row upsert of the selected stories
+   (`current=true`, refreshed `curatedAt`/relevance, preserving `openedAt`).
+
+The whole run is ~6 subrequests, well under the Workers Free plan's 50.
 
 **Testability:** see "Service seams & injection" below.
 
@@ -185,11 +187,10 @@ composition root:
 ```ts
 // worker/lib/hn.ts
 export interface HnClient {
-  topStoryIds(): Promise<number[]>;
-  item(id: number): Promise<HnItem | null>;
+  frontPage(): Promise<StoryInput[]>; // one Algolia request, full content
 }
 export const realHnClient: HnClient = {
-  /* firebaseio.com */
+  /* hn.algolia.com ?tags=front_page */
 };
 
 // worker/lib/ai.ts
@@ -280,9 +281,9 @@ first 06:20 cron.
 ## Testing
 
 - **Unit (vitest-pool-workers):** auth middleware (allow/deny), the digest
-  pipeline with injected fakes (per-user curation, incremental download, 60s
-  stale refetch, feed replacement preserving `openedAt`, per-user isolation,
-  empty-prefs fallback), the API routes against real workerd+D1, the
+  pipeline with injected fakes (single front-page fetch, per-user curation,
+  content cache refresh, feed replacement preserving `openedAt`, per-user
+  isolation, empty-prefs fallback), the API routes against real workerd+D1, the
   Europe/Amsterdam hour guard. One D1 per test file → `beforeEach` clears tables.
 - **e2e (Playwright):** each test runs as a unique random user (`fixtures.ts`
   overrides `extraHTTPHeaders`), so tests are isolated and run `fullyParallel`

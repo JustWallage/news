@@ -3,42 +3,39 @@ import { and, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { curations, stories } from "../../db/schema";
 import { getDb } from "./db";
-import { runDigest, type AiFilter } from "./digest";
-import type { HnClient, HnItem } from "./hn";
+import { runDigest, type AiFilter, type StoryInput } from "./digest";
+import type { HnClient } from "./hn";
 
-const ITEMS: HnItem[] = [
+const FRONT: StoryInput[] = [
   {
     id: 1,
-    type: "story",
     title: "Rust rocks",
     url: "https://e.com/r",
     by: "alice",
     score: 100,
-    descendants: 10,
+    comments: 10,
     time: 1700000000,
   },
   {
     id: 2,
-    type: "story",
     title: "Bitcoin moons",
     url: "https://e.com/b",
     by: "bob",
     score: 50,
-    descendants: 5,
+    comments: 5,
     time: 1700000100,
   },
 ];
 
-// HN client that counts item() downloads so we can assert the incremental cache.
-function countingHn(): { hn: HnClient; downloads: () => number } {
-  let downloads = 0;
+// HN client that counts front-page fetches (asserts the single-request design).
+function countingHn(): { hn: HnClient; fetches: () => number } {
+  let fetches = 0;
   return {
-    downloads: () => downloads,
+    fetches: () => fetches,
     hn: {
-      topStoryIds: () => Promise.resolve(ITEMS.map((i) => i.id)),
-      item: (id) => {
-        downloads += 1;
-        return Promise.resolve(ITEMS.find((i) => i.id === id) ?? null);
+      frontPage: () => {
+        fetches += 1;
+        return Promise.resolve(FRONT);
       },
     },
   };
@@ -58,7 +55,6 @@ const keywordFilter = (needle: string): AiFilter => ({
 
 const USER = "just@wallage.nl";
 
-// The pool gives one D1 per test FILE, so reset the shared tables per test.
 beforeEach(async () => {
   const db = getDb(env);
   await db.delete(curations);
@@ -66,16 +62,18 @@ beforeEach(async () => {
 });
 
 describe("runDigest", () => {
-  it("curates only matching stories for the user and caches all candidates", async () => {
+  it("fetches the front page once and caches every candidate", async () => {
     const db = getDb(env);
+    const hn = countingHn();
     const result = await runDigest(
       db,
-      { hn: countingHn().hn, ai: keywordFilter("rust") },
+      { hn: hn.hn, ai: keywordFilter("rust") },
       "rust",
       USER,
       new Date(),
     );
     expect(result.count).toBe(1);
+    expect(hn.fetches()).toBe(1);
 
     const feed = await db
       .select()
@@ -85,50 +83,30 @@ describe("runDigest", () => {
     expect((await db.select().from(stories)).length).toBe(2);
   });
 
-  it("does not re-download cached stories within a minute", async () => {
+  it("refreshes cached story content on a later run", async () => {
     const db = getDb(env);
-    const now = new Date("2026-06-17T06:20:00Z");
-    const first = countingHn();
-    await runDigest(
-      db,
-      { hn: first.hn, ai: keywordFilter("rust") },
-      "rust",
-      USER,
-      now,
-    );
-    expect(first.downloads()).toBe(2);
-
-    const second = countingHn();
-    await runDigest(
-      db,
-      { hn: second.hn, ai: keywordFilter("rust") },
-      "rust",
-      USER,
-      new Date(now.getTime() + 30_000),
-    );
-    expect(second.downloads()).toBe(0);
-  });
-
-  it("re-downloads cached stories older than a minute", async () => {
-    const db = getDb(env);
-    const now = new Date("2026-06-17T06:20:00Z");
     await runDigest(
       db,
       { hn: countingHn().hn, ai: keywordFilter("rust") },
       "rust",
       USER,
-      now,
+      new Date(),
     );
-
-    const stale = countingHn();
+    const bumped: HnClient = {
+      frontPage: () =>
+        Promise.resolve(
+          FRONT.map((s) => (s.id === 1 ? { ...s, score: 999 } : s)),
+        ),
+    };
     await runDigest(
       db,
-      { hn: stale.hn, ai: keywordFilter("rust") },
+      { hn: bumped, ai: keywordFilter("rust") },
       "rust",
       USER,
-      new Date(now.getTime() + 61_000),
+      new Date(),
     );
-    expect(stale.downloads()).toBe(2);
+    const row = await db.select().from(stories).where(eq(stories.id, 1));
+    expect(row[0]?.score).toBe(999);
   });
 
   it("replaces the current feed while preserving openedAt and the archive", async () => {

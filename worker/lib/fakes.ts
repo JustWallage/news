@@ -1,74 +1,69 @@
-import type { AiFilter } from "./digest";
-import type { HnClient, HnItem } from "./hn";
+import type { AiFilter, StoryInput } from "./digest";
+import type { HnClient } from "./hn";
 
-// Deterministic stand-ins for Hacker News + Workers AI, used in every
+// Deterministic stand-ins for the Algolia HN API + Workers AI, used in every
 // environment except production (see lib/deps.ts). They make `pnpm dev` show
 // realistic data and let e2e steer the feed purely through the preferences text.
 
-const CANNED: HnItem[] = [
+const CANNED: StoryInput[] = [
   {
     id: 1001,
-    type: "story",
     title: "Rust's new borrow checker lands",
     url: "https://example.com/rust",
     by: "alice",
     score: 412,
-    descendants: 88,
+    comments: 88,
     time: 1700000000,
   },
   {
     id: 1002,
-    type: "story",
     title: "Bitcoin hits a new all-time high",
     url: "https://example.com/btc",
     by: "bob",
     score: 230,
-    descendants: 150,
+    comments: 150,
     time: 1700000100,
   },
   {
     id: 1003,
-    type: "story",
     title: "Self-hosting your email in 2026",
     url: "https://example.com/email",
     by: "carol",
     score: 198,
-    descendants: 64,
+    comments: 64,
     time: 1700000200,
   },
   {
     id: 1004,
-    type: "story",
     title: "Show HN: a weekend Postgres clone",
+    url: null,
     by: "dave",
     score: 95,
-    descendants: 12,
+    comments: 12,
     time: 1700000300,
   },
   {
     id: 1005,
-    type: "story",
     title: "The economics of LLM inference",
     url: "https://example.com/llm",
     by: "erin",
     score: 320,
-    descendants: 110,
+    comments: 110,
     time: 1700000400,
   },
   {
     id: 1006,
-    type: "story",
     title: "Ask HN: your favorite mechanical keyboard?",
+    url: null,
     by: "frank",
     score: 40,
-    descendants: 200,
+    comments: 200,
     time: 1700000500,
   },
 ];
 
 export const fakeHnClient: HnClient = {
-  topStoryIds: () => Promise.resolve(CANNED.map((item) => item.id)),
-  item: (id) => Promise.resolve(CANNED.find((item) => item.id === id) ?? null),
+  frontPage: () => Promise.resolve(CANNED),
 };
 
 // Marks a story relevant when its title contains any word (>= 3 chars) from the

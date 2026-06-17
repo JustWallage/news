@@ -1,49 +1,54 @@
 import { z } from "zod";
+import type { StoryInput } from "./digest";
 
-// Hacker News Firebase API. No auth, no key. We only model the fields we use;
-// unknown fields are ignored by the schema.
-const BASE = "https://hacker-news.firebaseio.com/v0";
+// Algolia's Hacker News API returns the whole front page WITH content in a
+// single request — no per-item fetches — which keeps the digest well under the
+// Workers subrequest limit. `tags=front_page` mirrors the HN front page.
+const FRONT_PAGE_URL =
+  "https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=50";
 
-const hnItemSchema = z.object({
-  id: z.int(),
-  type: z.string(),
-  title: z.string().optional(),
-  url: z.string().optional(),
-  by: z.string().optional(),
-  score: z.number().optional(),
-  descendants: z.number().optional(),
-  time: z.number().optional(),
-  dead: z.boolean().optional(),
-  deleted: z.boolean().optional(),
+const hitSchema = z.object({
+  objectID: z.string(),
+  title: z.string().nullable(),
+  url: z.string().nullable().optional(),
+  author: z.string().nullable(),
+  points: z.number().nullable().optional(),
+  num_comments: z.number().nullable().optional(),
+  created_at_i: z.number(),
 });
-export type HnItem = z.infer<typeof hnItemSchema>;
-
-const idListSchema = z.array(z.int());
+const responseSchema = z.object({ hits: z.array(hitSchema) });
 
 /** The external dependency seam the digest pipeline depends on. */
 export interface HnClient {
-  topStoryIds(): Promise<number[]>;
-  item(id: number): Promise<HnItem | null>;
+  frontPage(): Promise<StoryInput[]>;
 }
 
 export const realHnClient: HnClient = {
-  async topStoryIds() {
-    const res = await fetch(`${BASE}/topstories.json`);
+  async frontPage() {
+    const res = await fetch(FRONT_PAGE_URL);
     if (!res.ok) {
-      throw new Error(`HN topstories failed (${res.status})`);
+      throw new Error(`Algolia front page failed (${res.status})`);
     }
-    return idListSchema.parse(await res.json());
-  },
-  async item(id) {
-    const res = await fetch(`${BASE}/item/${id}.json`);
-    if (!res.ok) {
-      throw new Error(`HN item ${id} failed (${res.status})`);
-    }
-    const data: unknown = await res.json();
-    if (data === null) {
-      return null;
-    }
-    const parsed = hnItemSchema.safeParse(data);
-    return parsed.success ? parsed.data : null;
+    const data = responseSchema.parse(await res.json());
+    return data.hits.flatMap((hit) => {
+      if (hit.title === null || hit.author === null) {
+        return [];
+      }
+      const id = Number(hit.objectID);
+      if (!Number.isInteger(id)) {
+        return [];
+      }
+      return [
+        {
+          id,
+          title: hit.title,
+          url: hit.url ?? null,
+          by: hit.author,
+          score: hit.points ?? 0,
+          comments: hit.num_comments ?? 0,
+          time: hit.created_at_i,
+        },
+      ];
+    });
   },
 };
