@@ -1,0 +1,40 @@
+name: Check and build
+
+on:
+  workflow_call:
+
+jobs:
+  check-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.14"
+          terraform_wrapper: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Terraform init (no backend)
+        run: pnpm tf:init
+
+      - name: Full check (format, lint, types, knip, jscpd, terraform, unit tests)
+        run: pnpm check
+
+      - name: Build
+        run: pnpm build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 1

@@ -1,0 +1,22 @@
+node_modules/
+dist/
+.wrangler/
+
+# secrets
+.dev.vars
+.env
+.env.*
+.bootstrap.env
+
+# test artifacts
+playwright-report/
+test-results/
+coverage/
+
+# terraform
+iac/.terraform/
+iac/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+iac/*.tfvars
+worker-configuration.d.ts

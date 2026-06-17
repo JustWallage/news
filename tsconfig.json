@@ -1,0 +1,16 @@
+{
+  // Solution file; real configs are the references. `paths` lives here too so
+  // tools that only read the root tsconfig (e.g. the shadcn CLI) resolve "@/".
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"],
+      "@shared/*": ["./shared/*"]
+    }
+  },
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.worker.json" },
+    { "path": "./tsconfig.e2e.json" }
+  ]
+}

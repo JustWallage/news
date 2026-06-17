@@ -1,0 +1,24 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "entry": ["src/main.tsx", "worker/index.ts"],
+  "project": [
+    "src/**/*.{ts,tsx}",
+    "worker/**/*.ts",
+    "shared/**/*.ts",
+    "db/**/*.ts",
+  ],
+  // test-env.d.ts is ambient type augmentation — never imported, always "unused".
+  "ignore": ["src/components/ui/**", "worker/test-env.d.ts"],
+  // tailwindcss/tw-animate-css/shadcn/geist are imported from src/index.css
+  // (knip does not parse CSS imports); "cloudflare" is the cloudflare:workers
+  // protocol, not an npm package.
+  // terraform is a system binary, not an npm package.
+  "ignoreBinaries": ["terraform"],
+  "ignoreDependencies": [
+    "tailwindcss",
+    "cloudflare",
+    "@fontsource-variable/geist",
+    "shadcn",
+    "tw-animate-css",
+  ],
+}

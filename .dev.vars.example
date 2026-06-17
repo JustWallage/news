@@ -1,0 +1,3 @@
+# Copy to .dev.vars (gitignored). Loaded by wrangler/vite-plugin for local dev.
+DEV_USER_EMAIL=just@wallage.nl
+TEST_AUTH_TOKEN=local-test-token

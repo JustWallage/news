@@ -1,0 +1,8 @@
+{
+  "pattern": "{src,worker,shared,db}/**/*.{ts,tsx}",
+  "ignore": ["**/src/components/ui/**", "**/*.test.ts", "**/db/migrations/**"],
+  "minTokens": 70,
+  "threshold": 1,
+  "reporters": ["consoleFull"],
+  "gitignore": true
+}

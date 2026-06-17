@@ -1,0 +1,41 @@
+name: Branch pipeline
+
+# Feature branches opt in by putting "run-pipeline" in the commit title.
+# Runs checks + a full ephemeral E2E; never deploys to production.
+
+on:
+  push:
+    branches-ignore: [main]
+
+concurrency:
+  group: branch-pipeline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-trigger:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.parse.outputs.run }}
+    steps:
+      - id: parse
+        env:
+          COMMIT_TITLE: ${{ github.event.head_commit.message }}
+        run: |
+          if printf '%s' "$COMMIT_TITLE" | head -1 | grep -q "run-pipeline"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  check-and-build:
+    needs: check-trigger
+    if: needs.check-trigger.outputs.run == 'true'
+    uses: ./.github/workflows/check-and-build.yml
+
+  ephemeral-e2e:
+    needs: check-and-build
+    uses: ./.github/workflows/ephemeral-e2e.yml
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      WORKERS_DEV_SUBDOMAIN: ${{ secrets.WORKERS_DEV_SUBDOMAIN }}

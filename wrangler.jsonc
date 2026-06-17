@@ -1,0 +1,71 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "news",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-06-01",
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+  "observability": {
+    "enabled": true,
+  },
+  // AI is wired only in production: local/e2e use fake deps (so unit tests and
+  // `wrangler dev` never open a remote AI connection). cf-typegen still surfaces
+  // the binding on the base Env because it merges all environments.
+  "vars": {
+    "ENVIRONMENT": "local",
+    "ALLOWED_EMAILS": "just@wallage.nl",
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "news-local",
+      "database_id": "news-local",
+      "migrations_dir": "db/migrations",
+    },
+  ],
+  "env": {
+    // E2E: deployed by CI as a uniquely named worker (--name news-e2e-<run_id>);
+    // the D1 id placeholder is substituted by CI before deploy. No cron here so
+    // the ephemeral worker never runs the digest.
+    "e2e": {
+      "vars": {
+        "ENVIRONMENT": "e2e",
+        "ALLOWED_EMAILS": "just@wallage.nl",
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "news-e2e",
+          "database_id": "TEMPLATE_E2E_DB_ID",
+          "migrations_dir": "db/migrations",
+        },
+      ],
+    },
+    // Production: D1 id placeholder substituted by CI from terraform output.
+    // The cron fires at 04:20 and 05:20 UTC; the handler keeps only the one
+    // that is 06:xx Europe/Amsterdam (DST-safe).
+    "production": {
+      "name": "news",
+      "ai": {
+        "binding": "AI",
+      },
+      "triggers": {
+        "crons": ["20 4 * * *", "20 5 * * *"],
+      },
+      "vars": {
+        "ENVIRONMENT": "production",
+        "ALLOWED_EMAILS": "just@wallage.nl",
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "news-prod",
+          "database_id": "TEMPLATE_PROD_DB_ID",
+          "migrations_dir": "db/migrations",
+        },
+      ],
+    },
+  },
+}

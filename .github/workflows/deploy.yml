@@ -1,0 +1,108 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  check-and-build:
+    uses: ./.github/workflows/check-and-build.yml
+
+  terraform:
+    needs: check-and-build
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+      TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TF_VAR_workers_dev_subdomain: ${{ secrets.WORKERS_DEV_SUBDOMAIN }}
+      TF_VAR_google_client_id: ${{ secrets.GOOGLE_CLIENT_ID }}
+      TF_VAR_google_client_secret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      TF_VAR_custom_domain_zone_id: ${{ secrets.CUSTOM_DOMAIN_ZONE_ID }}
+    outputs:
+      d1_database_id_prod: ${{ steps.tf_outputs.outputs.d1_database_id_prod }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.14"
+          terraform_wrapper: false
+
+      - name: Terraform init (R2 backend)
+        run: |
+          terraform -chdir=iac init -input=false \
+            -backend-config="endpoints={s3=\"https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com\"}"
+
+      - name: Terraform apply
+        run: terraform -chdir=iac apply -input=false -auto-approve
+
+      - name: Read outputs
+        id: tf_outputs
+        run: echo "d1_database_id_prod=$(terraform -chdir=iac output -raw d1_database_id_prod)" >> "$GITHUB_OUTPUT"
+
+  check-skip-e2e:
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.parse.outputs.skip }}
+    steps:
+      - id: parse
+        env:
+          COMMIT_TITLE: ${{ github.event.head_commit.message }}
+        run: |
+          if printf '%s' "$COMMIT_TITLE" | head -1 | grep -q -- "-skip-e2e"; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  ephemeral-e2e:
+    needs: [check-and-build, check-skip-e2e]
+    if: needs.check-skip-e2e.outputs.skip != 'true'
+    uses: ./.github/workflows/ephemeral-e2e.yml
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      WORKERS_DEV_SUBDOMAIN: ${{ secrets.WORKERS_DEV_SUBDOMAIN }}
+
+  deploy-prod:
+    needs: [check-and-build, terraform, ephemeral-e2e]
+    # Deploys are serialized and never cancelled mid-flight.
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+    # Runs when E2E succeeded OR was explicitly skipped via -skip-e2e.
+    if: >-
+      always() &&
+      needs.check-and-build.result == 'success' &&
+      needs.terraform.result == 'success' &&
+      (needs.ephemeral-e2e.result == 'success' || needs.ephemeral-e2e.result == 'skipped')
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Template production D1 id
+        run: sed -i "s/TEMPLATE_PROD_DB_ID/${{ needs.terraform.outputs.d1_database_id_prod }}/" wrangler.jsonc
+
+      - name: Apply migrations to production D1
+        run: pnpm exec wrangler d1 migrations apply DB --remote --env production
+
+      - name: Build (production environment)
+        run: CLOUDFLARE_ENV=production pnpm build
+
+      - name: Deploy
+        run: pnpm exec wrangler deploy -c dist/news/wrangler.json
