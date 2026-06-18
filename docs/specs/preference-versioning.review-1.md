@@ -1,6 +1,7 @@
 # Spec Review: Preference versioning & incremental re-evaluation
 
 ## Summary
+
 The implementation faithfully and completely satisfies the spec. The schema gains
 `preferences.version`, `curations.relevant`, and `curations.prefVersion` with the
 specified defaults; the migration is additive. `PUT /api/preferences` bumps the
@@ -17,16 +18,18 @@ correct. This is approvable.
 ## Findings
 
 ### Simplicity
+
 - Clean. The version-skip is implemented by querying only the rows at the current
   version (two bound params) rather than an `inArray` over ~100 ids, which both
   stays under the param cap and keeps the reuse map simple. No over-engineering.
 - `worker/lib/digest.ts:151-155` — the `fresh` map filters AI verdicts to ids in
   `toEvaluate` (`verdicts.filter((v) => toEvaluate.some((c) => c.id === v.id))`).
   This guards against an AI returning ids it wasn't asked about; it is a defensive
-  O(n*m) filter but n,m are small (≤ front-page size) so it is acceptable. Optional
+  O(n\*m) filter but n,m are small (≤ front-page size) so it is acceptable. Optional
   micro-simplification: build the map directly from `toEvaluate` ids. Not required.
 
 ### Spec implementation
+
 - All data-model changes present and matching the spec defaults
   (`db/schema.ts:35-36,50`; `db/migrations/0001_thick_toro.sql:1-3`).
 - Version bump semantics exactly as specified — insert→v1, text differs→prev+1,
@@ -46,6 +49,7 @@ correct. This is approvable.
 - `AiFilter` interface unchanged. Confirmed.
 
 ### No shortcuts
+
 - No hacks, swallowed errors, stubs, or TODOs. The "AI returned no verdict" case is
   handled per spec by leaving the candidate unwritten so it retries next run
   (`worker/lib/digest.ts:169-182`), rather than fabricating a verdict.
@@ -58,6 +62,7 @@ correct. This is approvable.
   stories."
 
 ### Code quality
+
 - Clear naming (`reusable`, `toEvaluate`, `fresh`, `evaluated`), consistent with the
   surrounding style. Logging mirrors the existing `[digest]` pattern.
 - `worker/lib/digest.ts:33` — STALE COMMENT. The chunk comment reads "stories have 8
@@ -68,6 +73,7 @@ correct. This is approvable.
   forbids stale narration.
 
 ## Action list (prioritized)
+
 1. Fix the contradictory/stale bound-parameter comment at `worker/lib/digest.ts:33`
    ("curations 7") to reflect the current 9 bound columns, consistent with the
    comment at line 35. (Cosmetic; not behavior-affecting.)
