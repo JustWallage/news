@@ -8,6 +8,13 @@
       "when": 1781684470389,
       "tag": "0000_outgoing_celestials",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1781724122308,
+      "tag": "0001_thick_toro",
+      "breakpoints": true
     }
   ]
 }

@@ -49,3 +49,30 @@ test("Refresh with no preferences curates the front page", async ({ page }) => {
   await page.getByRole("button", { name: "Refresh" }).click();
   await expect(page.locator("ol > li")).toHaveCount(30);
 });
+
+test("editing preferences re-evaluates a previously hidden story", async ({
+  page,
+}) => {
+  await page.goto("/preferences");
+  await page.getByLabel("Your interests").fill("rust");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Saved.")).toBeVisible();
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Refresh" }).click();
+  await expect(
+    page.getByRole("link", { name: /Rust's new borrow checker/ }),
+  ).toBeVisible();
+  await expect(page.getByText(/Bitcoin hits a new all-time high/)).toBeHidden();
+
+  await page.goto("/preferences");
+  await page.getByLabel("Your interests").fill("bitcoin");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Saved.")).toBeVisible();
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Refresh" }).click();
+  await expect(
+    page.getByRole("link", { name: /Bitcoin hits a new all-time high/ }),
+  ).toBeVisible();
+});

@@ -16,7 +16,8 @@ digestRoutes.post("/run", async (c) => {
   const result = await runDigest(
     db,
     c.get("deps"),
-    prefs,
+    prefs.text,
+    prefs.version,
     userEmail,
     new Date(),
   );

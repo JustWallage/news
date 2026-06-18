@@ -32,6 +32,8 @@ export const curations = sqliteTable(
       .references(() => stories.id),
     relevanceScore: integer("relevance_score").notNull(),
     reason: text("reason").notNull(),
+    relevant: integer("relevant", { mode: "boolean" }).notNull().default(true),
+    prefVersion: integer("pref_version").notNull().default(0),
     curatedAt: integer("curated_at", { mode: "timestamp" }).notNull(),
     current: integer("current", { mode: "boolean" }).notNull(),
     openedAt: integer("opened_at", { mode: "timestamp" }),
@@ -43,6 +45,9 @@ export const curations = sqliteTable(
 export const preferences = sqliteTable("preferences", {
   userEmail: text("user_email").primaryKey(),
   text: text("text").notNull(),
+  // Monotonic counter bumped on every real edit; stamped onto each curation so a
+  // digest can skip stories already judged against the current preferences.
+  version: integer("version").notNull().default(1),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 
