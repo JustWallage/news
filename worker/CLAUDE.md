@@ -32,8 +32,11 @@ logic, and there is no test-only route surface.
 - Preference VERSIONING drives an incremental digest: `PUT /api/preferences`
   bumps `preferences.version` only on a real text change (a no-op resave does
   not). `runDigest(db, deps, prefsText, prefVersion, userEmail, now)`
-  (`lib/digest.ts`): fetch the whole front page in ONE request
-  (`hn.frontPage()` → Algolia) → upsert all into `stories` → reuse curations
+  (`lib/digest.ts`): resolve candidates — if the latest `stories.fetchedAt` is
+  < 5 min before `now` (`RATE_LIMIT_MS`), REUSE the cached snapshot (the rows
+  sharing that max `fetchedAt`) and skip the HN fetch + upsert; otherwise fetch
+  the whole front page in ONE request (`hn.frontPage()` → Algolia) and upsert all
+  into `stories` → reuse curations
   already judged at `prefVersion` and AI-filter ONLY the candidates not yet
   judged at it → set `current=false` for the user, then upsert EVERY evaluated
   candidate (relevant and not) with `pref_version=prefVersion` and

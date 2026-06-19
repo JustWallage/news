@@ -1,5 +1,10 @@
-import { and, eq, sql } from "drizzle-orm";
-import { curations, preferences, stories } from "../../db/schema";
+import { and, desc, eq, sql } from "drizzle-orm";
+import {
+  curations,
+  preferences,
+  stories,
+  type StoryRow,
+} from "../../db/schema";
 import type { Db } from "./db";
 import type { HnClient } from "./hn";
 
@@ -34,12 +39,28 @@ const UNFILTERED_FALLBACK = 30;
 const STORY_CHUNK = 10;
 const CURATION_CHUNK = 10;
 
+// Rate-limit the upstream HN fetch: within this window of the last fetch, reuse
+// the cached front-page snapshot instead of hitting HN again.
+const RATE_LIMIT_MS = 5 * 60 * 1000;
+
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += size) {
     out.push(items.slice(i, i + size));
   }
   return out;
+}
+
+function toStoryInput(row: StoryRow): StoryInput {
+  return {
+    id: row.id,
+    title: row.title,
+    url: row.url,
+    by: row.by,
+    score: row.score,
+    comments: row.comments,
+    time: Math.floor(row.time.getTime() / 1000),
+  };
 }
 
 export interface LoadedPreferences {
@@ -80,42 +101,69 @@ export async function runDigest(
   userEmail: string,
   now: Date,
 ): Promise<DigestResult> {
-  // One request returns the whole front page with content.
-  const candidates = await deps.hn.frontPage();
   const trimmedPrefs = prefsText.trim();
+
+  // The globally last HN fetch is the most recent stories.fetchedAt; every row
+  // from one fetch shares that timestamp, so the latest snapshot is exactly the
+  // rows equal to it.
+  const [latest] = await db
+    .select({ fetchedAt: stories.fetchedAt })
+    .from(stories)
+    .orderBy(desc(stories.fetchedAt))
+    .limit(1);
+  const lastFetch = latest?.fetchedAt ?? null;
+
+  let candidates: StoryInput[];
+  if (
+    lastFetch !== null &&
+    now.getTime() - lastFetch.getTime() < RATE_LIMIT_MS
+  ) {
+    // Within the window: reuse the cached snapshot, no HN fetch, no upsert.
+    const cached = await db
+      .select()
+      .from(stories)
+      .where(eq(stories.fetchedAt, lastFetch));
+    candidates = cached.map(toStoryInput);
+    console.log(
+      `[digest] rate-limited: reusing ${candidates.length} cached stories from ${lastFetch.toISOString()}`,
+    );
+  } else {
+    // One request returns the whole front page with content.
+    candidates = await deps.hn.frontPage();
+    // Refresh the global content cache (chunked multi-row upserts; D1 100-param cap).
+    for (const part of chunk(candidates, STORY_CHUNK)) {
+      await db
+        .insert(stories)
+        .values(
+          part.map((s) => ({
+            id: s.id,
+            title: s.title,
+            url: s.url,
+            by: s.by,
+            score: s.score,
+            comments: s.comments,
+            time: new Date(s.time * 1000),
+            fetchedAt: now,
+          })),
+        )
+        .onConflictDoUpdate({
+          target: stories.id,
+          set: {
+            title: sql`excluded.title`,
+            url: sql`excluded.url`,
+            score: sql`excluded.score`,
+            comments: sql`excluded.comments`,
+            fetchedAt: sql`excluded.fetched_at`,
+          },
+        });
+    }
+  }
+
   console.log(
     `[digest] user=${userEmail} candidates=${candidates.length} prefs=${
       trimmedPrefs === "" ? "(empty)" : `${trimmedPrefs.length} chars`
     }`,
   );
-
-  // Refresh the global content cache (chunked multi-row upserts; D1 100-param cap).
-  for (const part of chunk(candidates, STORY_CHUNK)) {
-    await db
-      .insert(stories)
-      .values(
-        part.map((s) => ({
-          id: s.id,
-          title: s.title,
-          url: s.url,
-          by: s.by,
-          score: s.score,
-          comments: s.comments,
-          time: new Date(s.time * 1000),
-          fetchedAt: now,
-        })),
-      )
-      .onConflictDoUpdate({
-        target: stories.id,
-        set: {
-          title: sql`excluded.title`,
-          url: sql`excluded.url`,
-          score: sql`excluded.score`,
-          comments: sql`excluded.comments`,
-          fetchedAt: sql`excluded.fetched_at`,
-        },
-      });
-  }
 
   let evaluated: CandidateVerdict[];
   if (trimmedPrefs === "") {
