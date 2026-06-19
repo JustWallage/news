@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { telegram, type TelegramRow } from "../../db/schema";
 import type { TelegramStatus } from "../../shared/api";
+import botCommands from "./bot-commands.json";
 import type { Db } from "./db";
 import { loadPreferences, savePreferences } from "./digest";
 import type { TelegramUpdate } from "./telegram";
@@ -15,15 +16,11 @@ interface ChatIdentity {
   name: string | null;
 }
 
+// Derived from bot-commands.json — the same list registered with Telegram for
+// autocomplete (see the deploy workflow), so in-chat help can never drift.
 const HELP = [
   "Commands:",
-  "/user — show the connected account",
-  "/fetch-feed — fetch a fresh feed now and send it here",
-  "/set-preferences <text> — set what you want to read",
-  "/cur-preferences — show your current preferences",
-  "/daily-time HH:MM — daily summary time (or 'off' to clear)",
-  "/daily-time-2 HH:MM — second daily summary",
-  "/daily-time-3 HH:MM — third daily summary",
+  ...botCommands.commands.map((c) => `/${c.command} — ${c.description}`),
 ].join("\n");
 
 // A friendly label for a connected chat: "@handle" if it has a username, else
@@ -37,11 +34,11 @@ function chatLabel(row: TelegramRow): string | null {
 
 const GREETING =
   "Welcome! To connect this chat, open the app's preferences page, " +
-  "tap Connect Telegram, and send me /start <code>.";
+  "tap Generate start command, and send me /start <code>.";
 
 const NOT_LINKED =
   "This chat is not linked yet. Open the app's preferences page, tap " +
-  "Connect Telegram, and send me /start <code>.";
+  "Generate start command, and send me /start <code>.";
 
 export function formatMinuteOfDay(min: number): string {
   const hours = Math.floor(min / 60);
@@ -178,7 +175,7 @@ async function setPreferences(
   text: string,
 ): Promise<string> {
   if (text === "") {
-    return "Add the text after the command: /set-preferences <your interests>";
+    return "Add the text after the command: /set_preferences <your interests>";
   }
   await savePreferences(db, userEmail, text);
   return "✅ Preferences updated.";
@@ -208,7 +205,7 @@ async function setSlot(
   arg: string,
 ): Promise<string> {
   const label = `Daily summary ${index + 1}`;
-  const command = index === 0 ? "/daily-time" : `/daily-time-${index + 1}`;
+  const command = index === 0 ? "/daily_time" : `/daily_time_${index + 1}`;
   if (arg === "") {
     const current = slotValue(row, index);
     return current === null
@@ -278,22 +275,24 @@ export async function handleTelegramUpdate(
   switch (command) {
     case "/user":
       return { chatId, reply: `Connected account: ${row.userEmail}` };
-    case "/fetch-feed":
+    case "/fetch":
       return {
         chatId,
         reply: "🔄 Fetching your latest feed — this may take a few seconds…",
         feedFor: row.userEmail,
       };
-    case "/set-preferences":
+    case "/set_preferences":
       return { chatId, reply: await setPreferences(db, row.userEmail, arg) };
-    case "/cur-preferences":
+    case "/cur_preferences":
       return { chatId, reply: await curPreferences(db, row.userEmail) };
-    case "/daily-time":
+    case "/daily_time":
       return { chatId, reply: await setSlot(db, row, 0, arg) };
-    case "/daily-time-2":
+    case "/daily_time_2":
       return { chatId, reply: await setSlot(db, row, 1, arg) };
-    case "/daily-time-3":
+    case "/daily_time_3":
       return { chatId, reply: await setSlot(db, row, 2, arg) };
+    case "/help":
+      return { chatId, reply: HELP };
     default:
       return { chatId, reply: HELP };
   }

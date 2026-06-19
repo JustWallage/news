@@ -113,5 +113,9 @@ bot when they are unset).
      -d secret_token="<TELEGRAM_WEBHOOK_SECRET>"
    ```
 
-5. Deploy, then on the preferences page tap **Connect Telegram** and send the
-   bot `/start <code>`. Configure summary times with `/daily-time HH:MM`.
+5. Deploy, then on the preferences page tap **Generate start command** and send
+   the bot `/start <code>`. Configure summary times with `/daily_time HH:MM`.
+
+The bot's slash-command list (the `/`-autocomplete the Telegram client shows) is
+registered automatically on every deploy from `worker/lib/bot-commands.json` — no
+manual `setMyCommands` step.
