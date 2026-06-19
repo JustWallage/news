@@ -7,11 +7,14 @@ import { toStory } from "../lib/serialize";
 
 export const storiesRoutes = new Hono<AppEnv>();
 
-// The signed-in user's current feed: their curated stories joined to the shared
-// content cache, best matches first.
-storiesRoutes.get("/", async (c) => {
-  const db = getDb(c.env);
-  const rows = await db
+// The user's curated stories (feed or archive) joined to the shared content
+// cache; the caller adds the ordering.
+function curatedStories(
+  db: ReturnType<typeof getDb>,
+  userEmail: string,
+  current: boolean,
+) {
+  return db
     .select({
       id: stories.id,
       title: stories.title,
@@ -27,12 +30,28 @@ storiesRoutes.get("/", async (c) => {
     .from(curations)
     .innerJoin(stories, eq(curations.storyId, stories.id))
     .where(
-      and(
-        eq(curations.userEmail, c.get("userEmail")),
-        eq(curations.current, true),
-      ),
-    )
-    .orderBy(desc(curations.relevanceScore), desc(stories.score));
+      and(eq(curations.userEmail, userEmail), eq(curations.current, current)),
+    );
+}
+
+// The signed-in user's current feed: best matches first.
+storiesRoutes.get("/", async (c) => {
+  const rows = await curatedStories(
+    getDb(c.env),
+    c.get("userEmail"),
+    true,
+  ).orderBy(desc(curations.relevanceScore), desc(stories.score));
+  return c.json({ stories: rows.map(toStory) });
+});
+
+// The user's archive: curations the daily digest displaced (current = false).
+// These accumulate forever — never re-scored or removed — newest first.
+storiesRoutes.get("/archive", async (c) => {
+  const rows = await curatedStories(
+    getDb(c.env),
+    c.get("userEmail"),
+    false,
+  ).orderBy(desc(curations.curatedAt));
   return c.json({ stories: rows.map(toStory) });
 });
 
