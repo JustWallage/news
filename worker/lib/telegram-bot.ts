@@ -1,8 +1,8 @@
 import { eq } from "drizzle-orm";
-import { preferences, telegram, type TelegramRow } from "../../db/schema";
+import { telegram, type TelegramRow } from "../../db/schema";
 import type { TelegramStatus } from "../../shared/api";
 import type { Db } from "./db";
-import { loadPreferences } from "./digest";
+import { loadPreferences, savePreferences } from "./digest";
 import type { TelegramUpdate } from "./telegram";
 
 const LINK_CODE_TTL_MS = 15 * 60 * 1000;
@@ -180,18 +180,12 @@ async function setPreferences(
   if (text === "") {
     return "Add the text after the command: /set-preferences <your interests>";
   }
-  await db
-    .insert(preferences)
-    .values({ userEmail, text, updatedAt: new Date() })
-    .onConflictDoUpdate({
-      target: preferences.userEmail,
-      set: { text, updatedAt: new Date() },
-    });
+  await savePreferences(db, userEmail, text);
   return "✅ Preferences updated.";
 }
 
 async function curPreferences(db: Db, userEmail: string): Promise<string> {
-  const text = await loadPreferences(db, userEmail);
+  const { text } = await loadPreferences(db, userEmail);
   return text.trim() === "" ? "No preferences set yet." : text;
 }
 

@@ -11,8 +11,10 @@
   while the browser follows the link (new tab) — best effort, never blocks nav.
 - PreferencesPage seeds the textarea from the server only while it is pristine
   (a `dirty` ref), so a background revalidate can't clobber what is being typed.
-- Layout is the plain Hacker-News-style list (orange header, ranked rows). Two
-  routes only: `/` (HomePage) and `/preferences` (PreferencesPage).
+- Layout is the plain Hacker-News-style list (orange header, ranked rows).
+  Routes: `/` (HomePage, current feed), `/archive` (ArchivePage, displaced
+  curations via `GET /api/stories/archive` — its own `useCachedFetch`, NOT in
+  `FeedContext`), `/preferences` (PreferencesPage).
 - PreferencesPage's `TelegramSection` reads `/api/telegram` status (shows the
   connected chat label), POSTs `/api/telegram/link-code` to reveal a
   `/start <code>` connect code, and POSTs `/api/telegram/test` for the Send test

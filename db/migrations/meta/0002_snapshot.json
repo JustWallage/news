@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4ba1cbf4-6ebe-4e13-9101-7d341c1b01a9",
-  "prevId": "b30de7ec-af95-4d92-bc2e-898ce6c20f30",
+  "id": "07e8f916-be1b-4f67-acfb-26599e9fb040",
+  "prevId": "cec088e9-0161-4c5d-b490-1fd07c85c0f7",
   "tables": {
     "curations": {
       "name": "curations",
@@ -34,6 +34,22 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "relevant": {
+          "name": "relevant",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "pref_version": {
+          "name": "pref_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
         },
         "curated_at": {
           "name": "curated_at",
@@ -101,6 +117,14 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
         },
         "updated_at": {
           "name": "updated_at",

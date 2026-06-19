@@ -21,6 +21,9 @@ function Header() {
           <NavLink to="/" end className={navLink}>
             top
           </NavLink>
+          <NavLink to="/archive" className={navLink}>
+            archive
+          </NavLink>
           <NavLink to="/preferences" className={navLink}>
             preferences
           </NavLink>

@@ -1,6 +1,8 @@
 CREATE TABLE `telegram` (
 	`user_email` text PRIMARY KEY NOT NULL,
 	`chat_id` integer,
+	`chat_username` text,
+	`chat_name` text,
 	`link_code` text,
 	`link_code_expires_at` integer,
 	`slot1` integer,

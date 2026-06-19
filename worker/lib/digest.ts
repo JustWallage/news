@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { curations, preferences, stories } from "../../db/schema";
 import type { Db } from "./db";
 import type { HnClient } from "./hn";
@@ -30,7 +30,7 @@ export interface AiFilter {
 const UNFILTERED_FALLBACK = 30;
 
 // D1 caps a query at 100 bound parameters, so multi-row inserts are chunked to
-// stay under it: stories have 8 columns, curations 7 → 10 rows/insert is safe.
+// stay under it: stories have 8 columns, curations 9 → 10 rows/insert is safe.
 const STORY_CHUNK = 10;
 const CURATION_CHUNK = 10;
 
@@ -42,26 +42,70 @@ function chunk<T>(items: T[], size: number): T[][] {
   return out;
 }
 
+export interface LoadedPreferences {
+  text: string;
+  version: number;
+}
+
 export async function loadPreferences(
   db: Db,
   userEmail: string,
-): Promise<string> {
+): Promise<LoadedPreferences> {
   const rows = await db
     .select()
     .from(preferences)
     .where(eq(preferences.userEmail, userEmail))
     .limit(1);
-  return rows[0]?.text ?? "";
+  const row = rows[0] ?? null;
+  return { text: row?.text ?? "", version: row?.version ?? 0 };
+}
+
+// Upsert the preferences text, bumping `version` only on a real change (a no-op
+// resave must not force a needless full re-evaluation on the next digest).
+// Shared by the PUT route and the Telegram /set-preferences command.
+export async function savePreferences(
+  db: Db,
+  userEmail: string,
+  text: string,
+): Promise<void> {
+  const rows = await db
+    .select()
+    .from(preferences)
+    .where(eq(preferences.userEmail, userEmail))
+    .limit(1);
+  const existing = rows[0] ?? null;
+  if (existing !== null && existing.text === text) {
+    return;
+  }
+  if (existing === null) {
+    await db
+      .insert(preferences)
+      .values({ userEmail, text, updatedAt: new Date() });
+  } else {
+    await db
+      .update(preferences)
+      .set({ text, version: existing.version + 1, updatedAt: new Date() })
+      .where(eq(preferences.userEmail, userEmail));
+  }
 }
 
 export interface DigestResult {
   count: number;
 }
 
+interface CandidateVerdict {
+  storyId: number;
+  relevant: boolean;
+  relevanceScore: number;
+  reason: string;
+  curatedAt: Date;
+}
+
 export async function runDigest(
   db: Db,
   deps: { hn: HnClient; ai: AiFilter },
   prefsText: string,
+  prefVersion: number,
   userEmail: string,
   now: Date,
 ): Promise<DigestResult> {
@@ -102,46 +146,96 @@ export async function runDigest(
       });
   }
 
-  let selected: { storyId: number; relevanceScore: number; reason: string }[];
+  let evaluated: CandidateVerdict[];
   if (trimmedPrefs === "") {
-    selected = [...candidates]
+    // AI-free fallback: always recompute the top stories by score, no version-skip.
+    evaluated = [...candidates]
       .sort((a, b) => b.score - a.score)
       .slice(0, UNFILTERED_FALLBACK)
-      .map((c) => ({ storyId: c.id, relevanceScore: 0, reason: "" }));
-  } else {
-    const verdicts = await deps.ai.select(trimmedPrefs, candidates);
-    const known = new Set(candidates.map((c) => c.id));
-    selected = verdicts
-      .filter((v) => v.relevant && known.has(v.id))
-      .map((v) => ({
-        storyId: v.id,
-        relevanceScore: v.score,
-        reason: v.reason,
+      .map((c) => ({
+        storyId: c.id,
+        relevant: true,
+        relevanceScore: 0,
+        reason: "",
+        curatedAt: now,
       }));
+  } else {
+    // Reuse verdicts already produced against the CURRENT preference version; only
+    // (re-)evaluate front-page candidates judged at an older version (or never).
+    // Filtering by version (not the candidate ids) keeps this to two bound
+    // parameters — an `inArray` of ~100 ids would breach the D1 100-param cap.
+    const priorRows = await db
+      .select()
+      .from(curations)
+      .where(
+        and(
+          eq(curations.userEmail, userEmail),
+          eq(curations.prefVersion, prefVersion),
+        ),
+      );
+    const reusable = new Map(priorRows.map((r) => [r.storyId, r]));
+    const toEvaluate = candidates.filter((c) => !reusable.has(c.id));
+    const verdicts = await deps.ai.select(trimmedPrefs, toEvaluate);
+    const fresh = new Map(
+      verdicts
+        .filter((v) => toEvaluate.some((c) => c.id === v.id))
+        .map((v) => [v.id, v]),
+    );
+    evaluated = candidates.flatMap((c) => {
+      const prior = reusable.get(c.id);
+      if (prior !== undefined) {
+        return [
+          {
+            storyId: c.id,
+            relevant: prior.relevant,
+            relevanceScore: prior.relevanceScore,
+            reason: prior.reason,
+            curatedAt: prior.curatedAt,
+          },
+        ];
+      }
+      const verdict = fresh.get(c.id);
+      // A candidate the AI returned no verdict for stays unwritten so it is
+      // retried on the next refresh.
+      return verdict === undefined
+        ? []
+        : [
+            {
+              storyId: c.id,
+              relevant: verdict.relevant,
+              relevanceScore: verdict.score,
+              reason: verdict.reason,
+              curatedAt: now,
+            },
+          ];
+    });
     console.log(
-      `[digest] ai verdicts=${verdicts.length} relevant=${selected.length}`,
+      `[digest] candidates=${candidates.length} reused=${reusable.size} evaluated=${toEvaluate.length}`,
     );
   }
-  console.log(`[digest] selected=${selected.length} for user=${userEmail}`);
+  const relevantCount = evaluated.filter((e) => e.relevant).length;
+  console.log(`[digest] relevant=${relevantCount} for user=${userEmail}`);
 
-  // Replace this user's current feed: drop everyone out, then upsert the freshly
-  // selected stories as current (keeping openedAt on rows that survive). Both are
-  // single statements, so the whole run stays at a handful of subrequests.
+  // Recompute this user's feed: drop everyone out, then upsert every evaluated
+  // candidate, marking current = relevant. Stories not on the current front page
+  // keep their row but leave the feed. openedAt survives (not in the update set).
   await db
     .update(curations)
     .set({ current: false })
     .where(eq(curations.userEmail, userEmail));
-  for (const part of chunk(selected, CURATION_CHUNK)) {
+  for (const part of chunk(evaluated, CURATION_CHUNK)) {
     await db
       .insert(curations)
       .values(
-        part.map((s) => ({
+        part.map((e) => ({
           userEmail,
-          storyId: s.storyId,
-          relevanceScore: s.relevanceScore,
-          reason: s.reason,
-          curatedAt: now,
-          current: true,
+          storyId: e.storyId,
+          relevanceScore: e.relevanceScore,
+          reason: e.reason,
+          relevant: e.relevant,
+          prefVersion,
+          curatedAt: e.curatedAt,
+          current: e.relevant,
           openedAt: null,
         })),
       )
@@ -150,10 +244,12 @@ export async function runDigest(
         set: {
           relevanceScore: sql`excluded.relevance_score`,
           reason: sql`excluded.reason`,
+          relevant: sql`excluded.relevant`,
+          prefVersion: sql`excluded.pref_version`,
           curatedAt: sql`excluded.curated_at`,
           current: sql`excluded.current`,
         },
       });
   }
-  return { count: selected.length };
+  return { count: relevantCount };
 }

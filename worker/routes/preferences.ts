@@ -4,6 +4,7 @@ import { preferences } from "../../db/schema";
 import { preferencesUpdateSchema } from "../../shared/api";
 import type { AppEnv } from "../env";
 import { getDb } from "../lib/db";
+import { savePreferences } from "../lib/digest";
 
 export const preferencesRoutes = new Hono<AppEnv>();
 
@@ -37,13 +38,6 @@ preferencesRoutes.put("/", async (c) => {
     return c.json({ error: "Invalid request body" }, 400);
   }
   const db = getDb(c.env);
-  const userEmail = c.get("userEmail");
-  await db
-    .insert(preferences)
-    .values({ userEmail, text: parsed.data.text, updatedAt: new Date() })
-    .onConflictDoUpdate({
-      target: preferences.userEmail,
-      set: { text: parsed.data.text, updatedAt: new Date() },
-    });
+  await savePreferences(db, c.get("userEmail"), parsed.data.text);
   return c.json({ ok: true });
 });

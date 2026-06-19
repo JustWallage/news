@@ -24,7 +24,7 @@ export async function runScheduledDigest(env: Bindings): Promise<void> {
   }
   const db = getDb(env);
   const prefs = await loadPreferences(db, owner);
-  await runDigest(db, createDeps(env), prefs, owner, now);
+  await runDigest(db, createDeps(env), prefs.text, prefs.version, owner, now);
 }
 
 // Re-run the digest for the user, then push the freshly curated feed to their
@@ -38,7 +38,7 @@ export async function sendDailyDigest(
   now: Date,
 ): Promise<void> {
   const prefs = await loadPreferences(db, userEmail);
-  await runDigest(db, deps, prefs, userEmail, now);
+  await runDigest(db, deps, prefs.text, prefs.version, userEmail, now);
   const feed = await loadFeed(db, userEmail);
   await deps.telegram.sendMessage(chatId, formatDigestMessage(feed, appUrl));
 }
