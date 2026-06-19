@@ -2,7 +2,11 @@ import { Hono } from "hono";
 import { telegramLinkCodeSchema, telegramStatusSchema } from "../../shared/api";
 import type { AppEnv } from "../env";
 import { getDb } from "../lib/db";
-import { loadTelegramStatus, mintLinkCode } from "../lib/telegram-bot";
+import {
+  loadChatId,
+  loadTelegramStatus,
+  mintLinkCode,
+} from "../lib/telegram-bot";
 
 export const telegramRoutes = new Hono<AppEnv>();
 
@@ -31,4 +35,17 @@ telegramRoutes.post("/link-code", async (c) => {
       expiresAt: expiresAt.toISOString(),
     }),
   );
+});
+
+// Send a test message to the connected chat (the "Send test message" button).
+telegramRoutes.post("/test", async (c) => {
+  const db = getDb(c.env);
+  const chatId = await loadChatId(db, c.get("userEmail"));
+  if (chatId === null) {
+    return c.json({ error: "Telegram is not connected" }, 409);
+  }
+  await c
+    .get("deps")
+    .telegram.sendMessage(chatId, "✅ Test message from your News bot.");
+  return c.json({ ok: true });
 });

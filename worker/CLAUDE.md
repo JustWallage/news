@@ -34,7 +34,9 @@ no `ENVIRONMENT`/`isTest` checks leak into logic, and there is no test-only rout
 - `handleTelegramUpdate(db, update)` is pure w.r.t. Telegram: it applies side
   effects and returns `{ chatId, reply }`; the route sends the reply. The chat
   is resolved by `chatId`; linking consumes a one-time `linkCode` minted by
-  `POST /api/telegram/link-code` (15-min expiry).
+  `POST /api/telegram/link-code` (15-min expiry) and captures the chat
+  username/name for `chatLabel` (Telegram does not expose phone numbers to bots).
+  `POST /api/telegram/test` sends a test message via `c.var.deps.telegram`.
 - Slot times are minute-of-day rounded to 5 (`parseDailyTime`).
 
 ## Data model & invariants

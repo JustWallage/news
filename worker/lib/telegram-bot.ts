@@ -7,14 +7,32 @@ import type { TelegramUpdate } from "./telegram";
 
 const LINK_CODE_TTL_MS = 15 * 60 * 1000;
 
+// The identifying bits of a Telegram chat, captured at link time so the app can
+// show which chat is connected.
+interface ChatIdentity {
+  id: number;
+  username: string | null;
+  name: string | null;
+}
+
 const HELP = [
   "Commands:",
+  "/user — show the connected account",
   "/set-preferences <text> — set what you want to read",
   "/cur-preferences — show your current preferences",
   "/daily-time HH:MM — daily summary time (or 'off' to clear)",
   "/daily-time-2 HH:MM — second daily summary",
   "/daily-time-3 HH:MM — third daily summary",
 ].join("\n");
+
+// A friendly label for a connected chat: "@handle" if it has a username, else
+// the stored display name, else null.
+function chatLabel(row: TelegramRow): string | null {
+  if (row.chatUsername !== null) {
+    return `@${row.chatUsername}`;
+  }
+  return row.chatName;
+}
 
 const GREETING =
   "Welcome! To connect this chat, open the app's preferences page, " +
@@ -88,7 +106,19 @@ export async function loadTelegramStatus(
   const slots = [row?.slot1, row?.slot2, row?.slot3].map((slot) =>
     slot === null || slot === undefined ? null : formatMinuteOfDay(slot),
   );
-  return { linked: row?.chatId != null, slots };
+  return {
+    linked: row?.chatId != null,
+    chatLabel: row?.chatId == null ? null : chatLabel(row),
+    slots,
+  };
+}
+
+/** The Telegram chat id bound to the user, or null when not linked. */
+export async function loadChatId(
+  db: Db,
+  userEmail: string,
+): Promise<number | null> {
+  return (await loadByEmail(db, userEmail))?.chatId ?? null;
 }
 
 export async function mintLinkCode(
@@ -110,7 +140,7 @@ export async function mintLinkCode(
 
 async function handleStart(
   db: Db,
-  chatId: number,
+  chat: ChatIdentity,
   code: string,
 ): Promise<string> {
   if (code === "") {
@@ -130,7 +160,13 @@ async function handleStart(
   }
   await db
     .update(telegram)
-    .set({ chatId, linkCode: null, linkCodeExpiresAt: null })
+    .set({
+      chatId: chat.id,
+      chatUsername: chat.username,
+      chatName: chat.name,
+      linkCode: null,
+      linkCodeExpiresAt: null,
+    })
     .where(eq(telegram.userEmail, row.userEmail));
   return `✅ Linked! I'll send your daily summaries here.\n\n${HELP}`;
 }
@@ -214,12 +250,20 @@ export async function handleTelegramUpdate(
   if (!text.startsWith("/")) {
     return null;
   }
-  const chatId = message.chat.id;
+  const { id: chatId } = message.chat;
+  const name = [message.chat.first_name, message.chat.last_name].filter(
+    (part): part is string => part !== undefined && part !== "",
+  );
+  const chat: ChatIdentity = {
+    id: chatId,
+    username: message.chat.username ?? null,
+    name: name.length > 0 ? name.join(" ") : null,
+  };
   const [command, ...rest] = text.split(/\s+/);
   const arg = rest.join(" ").trim();
 
   if (command === "/start") {
-    return { chatId, reply: await handleStart(db, chatId, arg) };
+    return { chatId, reply: await handleStart(db, chat, arg) };
   }
 
   const row = await loadByChat(db, chatId);
@@ -228,6 +272,8 @@ export async function handleTelegramUpdate(
   }
 
   switch (command) {
+    case "/user":
+      return { chatId, reply: `Connected account: ${row.userEmail}` };
     case "/set-preferences":
       return { chatId, reply: await setPreferences(db, row.userEmail, arg) };
     case "/cur-preferences":

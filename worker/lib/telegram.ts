@@ -35,7 +35,12 @@ export function makeRealTelegramClient(token: string): TelegramClient {
 export const updateSchema = z.object({
   message: z
     .object({
-      chat: z.object({ id: z.number() }),
+      chat: z.object({
+        id: z.number(),
+        username: z.string().optional(),
+        first_name: z.string().optional(),
+        last_name: z.string().optional(),
+      }),
       text: z.string().optional(),
     })
     .optional(),

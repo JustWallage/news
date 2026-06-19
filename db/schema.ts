@@ -56,6 +56,8 @@ export const telegram = sqliteTable(
   {
     userEmail: text("user_email").primaryKey(),
     chatId: integer("chat_id"),
+    chatUsername: text("chat_username"),
+    chatName: text("chat_name"),
     linkCode: text("link_code"),
     linkCodeExpiresAt: integer("link_code_expires_at", { mode: "timestamp" }),
     slot1: integer("slot1"),

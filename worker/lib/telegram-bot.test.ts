@@ -19,6 +19,11 @@ const message = (text: string, chatId = CHAT) => ({
   message: { chat: { id: chatId }, text },
 });
 
+const messageFrom = (
+  text: string,
+  chat: { id: number; username?: string; first_name?: string },
+) => ({ message: { chat, text } });
+
 beforeEach(async () => {
   const db = getDb(env);
   await db.delete(telegram);
@@ -57,6 +62,8 @@ describe("dueSlot", () => {
   const row = {
     userEmail: USER,
     chatId: CHAT,
+    chatUsername: null,
+    chatName: null,
     linkCode: null,
     linkCodeExpiresAt: null,
     slot1: 485,
@@ -92,6 +99,30 @@ describe("handleTelegramUpdate", () => {
     const db = getDb(env);
     const res = await handleTelegramUpdate(db, message("/cur-preferences"));
     expect(res?.reply).toContain("not linked");
+  });
+
+  it("captures the chat label on link and reports the account via /user", async () => {
+    const db = getDb(env);
+    const { code } = await mintLinkCode(db, USER, new Date());
+    await handleTelegramUpdate(
+      db,
+      messageFrom(`/start ${code}`, { id: CHAT, username: "just" }),
+    );
+
+    expect((await loadTelegramStatus(db, USER)).chatLabel).toBe("@just");
+
+    const who = await handleTelegramUpdate(db, message("/user"));
+    expect(who?.reply).toContain(USER);
+  });
+
+  it("falls back to the name when the chat has no username", async () => {
+    const db = getDb(env);
+    const { code } = await mintLinkCode(db, USER, new Date());
+    await handleTelegramUpdate(
+      db,
+      messageFrom(`/start ${code}`, { id: CHAT, first_name: "Just" }),
+    );
+    expect((await loadTelegramStatus(db, USER)).chatLabel).toBe("Just");
   });
 
   it("sets and reads preferences once linked", async () => {

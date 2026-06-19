@@ -75,6 +75,8 @@ New table `telegram` (Drizzle, one row per user; PK `userEmail`):
 | ------------------- | ------------------- | ----------------------------------------------- |
 | `userEmail`         | text PK             | the account this chat controls                  |
 | `chatId`            | integer nullable    | Telegram chat id; null until linked (unique)    |
+| `chatUsername`      | text nullable       | chat @username captured at link (for the label) |
+| `chatName`          | text nullable       | chat display name captured at link (fallback)   |
 | `linkCode`          | text nullable       | pending one-time link code; null once consumed  |
 | `linkCodeExpiresAt` | integer (timestamp) | nullable; expiry of `linkCode`                  |
 | `slot1`             | integer nullable    | daily-summary minute-of-day 0–1439 (mult. of 5) |
@@ -87,18 +89,22 @@ Generated via `pnpm migrate:gen` (new additive migration). A unique index on
 ## Shared contracts (`shared/api.ts`)
 
 ```ts
-telegramStatusSchema   = { linked: boolean, slots: (string|null)[] }   // "HH:MM"|null, length 3
+telegramStatusSchema   = { linked: boolean, chatLabel: string|null, slots: (string|null)[] } // "HH:MM"|null, length 3
 telegramLinkCodeSchema = { code: string, url: string|null, expiresAt: ISO }
 ```
 
 `url` is the `t.me` deep link, or `null` when `TELEGRAM_BOT_USERNAME` is unset.
+`chatLabel` is "@handle" (or the chat's display name) for the connected chat —
+Telegram does not expose the phone number to bots, so the username/name is the
+identity shown.
 
 ## API (behind auth, under `/api/telegram`)
 
-| method + path                  | result                                           |
-| ------------------------------ | ------------------------------------------------ |
-| `GET /api/telegram`            | `telegramStatus` for the signed-in user          |
-| `POST /api/telegram/link-code` | mints a code (15-min expiry), `telegramLinkCode` |
+| method + path                  | result                                              |
+| ------------------------------ | --------------------------------------------------- |
+| `GET /api/telegram`            | `telegramStatus` for the signed-in user             |
+| `POST /api/telegram/link-code` | mints a code (15-min expiry), `telegramLinkCode`    |
+| `POST /api/telegram/test`      | sends a test message to the chat; 409 if not linked |
 
 ## Webhook (`POST /telegram/webhook`, not under `/api`)
 
@@ -110,8 +116,10 @@ via `deps.telegram.sendMessage` and returns 200.
 
 Commands (chat must be linked except `/start <code>`):
 
-- `/start <code>` — bind this chat to the account that owns the unexpired code;
-  clears the code. Invalid/expired → error reply. `/start` alone → greeting.
+- `/start <code>` — bind this chat to the account that owns the unexpired code
+  (capturing the chat username/name); clears the code. Invalid/expired → error
+  reply. `/start` alone → greeting.
+- `/user` — reply with the connected account's email.
 - `/set-preferences <text>` — upsert the preferences blob; confirm.
 - `/cur-preferences` — reply with the current text (or "none set").
 - `/daily-time [HH:MM | off]` — no arg shows the current slot; `HH:MM` sets it

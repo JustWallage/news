@@ -17,6 +17,9 @@ function TelegramSection() {
   const { data } = useCachedFetch("/api/telegram", telegramStatusSchema);
   const [code, setCode] = useState<TelegramLinkCode | null>(null);
   const [pending, setPending] = useState(false);
+  const [test, setTest] = useState<"idle" | "sending" | "sent" | "error">(
+    "idle",
+  );
 
   const connect = (): void => {
     setPending(true);
@@ -34,21 +37,58 @@ function TelegramSection() {
       });
   };
 
+  const sendTest = (): void => {
+    setTest("sending");
+    apiFetch("/api/telegram/test", okSchema, jsonInit("POST", {}))
+      .then(() => {
+        setTest("sent");
+      })
+      .catch(() => {
+        setTest("error");
+      });
+  };
+
+  const linked = data?.linked === true;
+  const label = data?.chatLabel ?? null;
   const slots = data?.slots.filter((s): s is string => s !== null) ?? [];
+
+  let statusText: string;
+  if (!linked) {
+    statusText =
+      "Get your summaries in Telegram. Generate a code, then send the bot /start <code>.";
+  } else {
+    const who = label === null ? "Connected." : `Connected as ${label}.`;
+    const when =
+      slots.length > 0
+        ? ` Daily summaries at ${slots.join(", ")}.`
+        : " Set summary times in the bot with /daily-time.";
+    statusText = who + when;
+  }
 
   return (
     <div className="space-y-2 border-t pt-4">
       <Label>Telegram</Label>
-      <p className="text-sm text-muted-foreground">
-        {data?.linked === true
-          ? slots.length > 0
-            ? `Connected. Daily summaries at ${slots.join(", ")}.`
-            : "Connected. Set summary times in the bot with /daily-time."
-          : "Get your summaries in Telegram. Generate a code, then send the bot /start <code>."}
-      </p>
-      <Button variant="outline" onClick={connect} disabled={pending}>
-        {data?.linked === true ? "Reconnect Telegram" : "Connect Telegram"}
-      </Button>
+      <p className="text-sm text-muted-foreground">{statusText}</p>
+      <div className="flex items-center gap-3">
+        <Button variant="outline" onClick={connect} disabled={pending}>
+          {linked ? "Reconnect Telegram" : "Connect Telegram"}
+        </Button>
+        {linked && (
+          <Button
+            variant="outline"
+            onClick={sendTest}
+            disabled={test === "sending"}
+          >
+            {test === "sending" ? "Sending…" : "Send test message"}
+          </Button>
+        )}
+        {test === "sent" && (
+          <span className="text-sm text-muted-foreground">Sent.</span>
+        )}
+        {test === "error" && (
+          <span className="text-sm text-destructive">Could not send.</span>
+        )}
+      </div>
       {code !== null && (
         <div className="space-y-1 text-sm">
           <p>

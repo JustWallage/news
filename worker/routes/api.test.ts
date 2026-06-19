@@ -86,8 +86,16 @@ describe("api", () => {
   it("reports Telegram status and mints a link code", async () => {
     const before = await (
       await app.request("/api/telegram", get, env)
-    ).json<{ linked: boolean; slots: (string | null)[] }>();
-    expect(before).toEqual({ linked: false, slots: [null, null, null] });
+    ).json<{
+      linked: boolean;
+      chatLabel: string | null;
+      slots: (string | null)[];
+    }>();
+    expect(before).toEqual({
+      linked: false,
+      chatLabel: null,
+      slots: [null, null, null],
+    });
 
     const minted = await (
       await app.request("/api/telegram/link-code", json("POST", {}), env)
@@ -118,7 +126,10 @@ describe("api", () => {
       body: JSON.stringify(body),
     });
     const update = {
-      message: { chat: { id: 777 }, text: `/start ${minted.code}` },
+      message: {
+        chat: { id: 777, username: "just" },
+        text: `/start ${minted.code}`,
+      },
     };
 
     const wrong = await app.request(
@@ -144,7 +155,39 @@ describe("api", () => {
 
     const status = await (
       await app.request("/api/telegram", get, env)
-    ).json<{ linked: boolean }>();
+    ).json<{ linked: boolean; chatLabel: string | null }>();
     expect(status.linked).toBe(true);
+    expect(status.chatLabel).toBe("@just");
+  });
+
+  it("rejects a test message until a chat is linked", async () => {
+    const notLinked = await app.request(
+      "/api/telegram/test",
+      json("POST", {}),
+      env,
+    );
+    expect(notLinked.status).toBe(409);
+
+    const minted = await (
+      await app.request("/api/telegram/link-code", json("POST", {}), env)
+    ).json<{ code: string }>();
+    const linkUpdate = {
+      message: { chat: { id: 888 }, text: `/start ${minted.code}` },
+    };
+    await app.request(
+      "/telegram/webhook",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Telegram-Bot-Api-Secret-Token": "unit-webhook-secret",
+        },
+        body: JSON.stringify(linkUpdate),
+      },
+      env,
+    );
+
+    const sent = await app.request("/api/telegram/test", json("POST", {}), env);
+    expect(sent.status).toBe(200);
   });
 });

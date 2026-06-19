@@ -57,6 +57,8 @@ export const digestRunResultSchema = z.object({ count: z.int() });
 export const telegramStatusSchema = z.object({
   /** Whether a Telegram chat is bound to this account. */
   linked: z.boolean(),
+  /** Human label for the connected chat ("@handle" or name); null if unknown. */
+  chatLabel: z.string().nullable(),
   /** The three daily-summary slots as "HH:MM", null when unset. */
   slots: z.array(z.string().nullable()).length(3),
 });
