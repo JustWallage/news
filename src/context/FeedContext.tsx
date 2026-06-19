@@ -54,12 +54,17 @@ export function FeedProvider({ children }: { children: ReactNode }) {
       });
   }, [mutate]);
 
-  const recordOpen = useCallback((id: number) => {
-    // Fire-and-forget: the link opens in a new tab regardless.
-    void apiFetch(`/api/stories/${id}/open`, okSchema, {
-      method: "POST",
-    }).catch(() => undefined);
-  }, []);
+  const recordOpen = useCallback(
+    (id: number) => {
+      // The link opens in a new tab regardless; revalidate so the row greys.
+      apiFetch(`/api/stories/${id}/open`, okSchema, { method: "POST" })
+        .then(() => {
+          mutate();
+        })
+        .catch(() => undefined);
+    },
+    [mutate],
+  );
 
   return (
     <FeedContext.Provider
