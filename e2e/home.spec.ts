@@ -49,3 +49,21 @@ test("Refresh with no preferences curates the front page", async ({ page }) => {
   await page.getByRole("button", { name: "Refresh" }).click();
   await expect(page.locator("ol > li")).toHaveCount(30);
 });
+
+test("opening a story greys its title at once, without a reload", async ({
+  page,
+  request,
+}) => {
+  await request.put("/api/preferences", { data: { text: "rust" } });
+  await request.post("/api/digest/run");
+
+  await page.goto("/");
+  const link = page.getByRole("link", { name: /Rust's new borrow checker/ });
+  await expect(link).not.toHaveClass(/text-muted-foreground/);
+
+  const popup = page.context().waitForEvent("page");
+  await link.click();
+  await (await popup).close();
+
+  await expect(link).toHaveClass(/text-muted-foreground/);
+});
