@@ -7,6 +7,9 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
+# Run in the background so the session starts without waiting for downloads.
+echo '{"async": true, "asyncTimeout": 600000}'
+
 cd "$CLAUDE_PROJECT_DIR"
 
 # Node deps (cached after first run).
