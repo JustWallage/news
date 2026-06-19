@@ -76,8 +76,7 @@
         "ENVIRONMENT": "production",
         "ALLOWED_EMAILS": "just@wallage.nl",
         "APP_URL": "https://news.justwallage.nl",
-        // Set this to the bot's @username (without the @) to enable t.me deep links.
-        "TELEGRAM_BOT_USERNAME": "",
+        "TELEGRAM_BOT_USERNAME": "JustlyNewsBot",
       },
       "d1_databases": [
         {

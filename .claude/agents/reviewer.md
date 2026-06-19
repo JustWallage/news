@@ -20,12 +20,14 @@ If a required input is missing, state that in the review doc and review what you
 
 1. Read the spec document fully.
 2. Run `git diff main` to see all changes against the main branch. Also run `git status` so you don't miss untracked files; read any new files with the Read tool.
-3. Evaluate the changes on these axes:
+3. Run the root `pnpm check` (from the worktree dir if one was given) to validate the complete project — build, lint, types, tests. Treat any failure as a finding.
+4. Evaluate the changes on these axes:
    - **Simplicity** — is this the simplest correct approach, or is it over-engineered / more code than needed?
    - **Spec implementation** — is every spec requirement implemented? Anything missing, partial, or invented beyond the spec?
    - **No shortcuts** — any hacks, workarounds, swallowed errors, stubbed logic, or TODOs left where real implementation was required?
    - **Code quality** — clear, readable, well-named, consistent with surrounding repo style and conventions?
-4. Write the review document to the given output path.
+   - **Test coverage** — was new logic added? Yes, do tests cover all flows? Unit/integration/E2E
+5. Write the review document to the given output path.
 
 ## Review document format
 
@@ -47,6 +49,9 @@ One paragraph: does the implementation satisfy the spec, and overall quality.
 - finding (file:line) — what and why, concrete fix
 
 ### Code quality
+- finding (file:line) — what and why, concrete fix
+
+### Test coverage
 - finding (file:line) — what and why, concrete fix
 
 ## Action list (prioritized)

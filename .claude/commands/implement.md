@@ -40,12 +40,12 @@ If nothing is genuinely open, skip the questions entirely.
 
 ## 4. Write the spec + post decisions summary
 
-Write the spec to `$WT/docs/specs/<slug>.md`. Capture the original request verbatim, plus the requirements/behavior — and **fold in every resolved decision** (both the ones the user made and the ones you made). The reviewer reads only the spec and the diff, never this chat — so any decision not written into the spec is invisible to it. The spec must stand alone.
+Write the spec to `$WT/docs/specs/<slug>/index.md`. Capture the original request verbatim, plus the requirements/behavior (including tests for new logic, unit/integration/e2e) — and **fold in every resolved decision** (both the ones the user made and the ones you made). The reviewer reads only the spec and the diff, never this chat — so any decision not written into the spec is invisible to it. The spec must stand alone.
 
 Then post in the chat a **short but complete decisions summary** — one scannable bullet per decision that shaped the spec, each tagged `[user]` or `[AI]`:
 
 ```
-Spec: docs/specs/<slug>.md  (branch <slug>)
+Spec: docs/specs/<slug>/index.md  (branch <slug>)
 Decisions:
 - [user] <decision>
 - [AI] <decision the user didn't have to make>
@@ -70,13 +70,13 @@ Implement the feature per the spec, working in `$WT`:
 
 ## 6. Verify
 
-- Run `pnpm run check` and fix anything that fails before moving on. Do not proceed to review until checks pass.
+- Run the root `pnpm check` to validate the complete project. Fix anything that fails before moving on. Do not proceed to review until checks pass.
 
 ## 7. Bounded review loop
 
-Review docs are numbered: `$WT/docs/specs/<slug>.review-1.md`, `.review-2.md`, … Loop, max **3** cycles:
+Review docs are numbered: `$WT/docs/specs/<slug>/review-1.md`, `review-2.md`, … Loop, max **3** cycles:
 
-1. Dispatch the `reviewer` subagent via the Task tool (`subagent_type: reviewer`). In the prompt, give it: the spec path, the review-doc output path for this cycle (`.review-N.md`), and the worktree path `$WT` — instruct it to run all git/read commands from `$WT` (so `git diff main` sees the branch changes). It reviews in a fresh isolated context against the diff — it never sees your reasoning.
+1. Dispatch the `reviewer` subagent via the Task tool (`subagent_type: reviewer`). In the prompt, give it: the spec path, the review-doc output path for this cycle (`review-N.md`), and the worktree path `$WT` — instruct it to run all git/read commands from `$WT` (so `git diff main` sees the branch changes). It reviews in a fresh isolated context against the diff — it never sees your reasoning.
 2. Read the review doc. Its last line is `VERDICT: APPROVED` or `VERDICT: CHANGES_REQUESTED`.
    1. If `APPROVED` → exit loop.
    2. If `CHANGES_REQUESTED` → apply the feedback as code changes, re-verify (step 6), commit + push, then dispatch a **fresh** reviewer for cycle N+1.
