@@ -104,13 +104,14 @@ describe("runDigest", () => {
 
   it("refreshes cached story content on a later run", async () => {
     const db = getDb(env);
+    const t0 = new Date("2026-06-17T06:20:00Z");
     await runDigest(
       db,
       { hn: countingHn().hn, ai: keywordFilter("rust") },
       "rust",
       1,
       USER,
-      new Date(),
+      t0,
     );
     const bumped: HnClient = {
       frontPage: () =>
@@ -118,13 +119,14 @@ describe("runDigest", () => {
           FRONT.map((s) => (s.id === 1 ? { ...s, score: 999 } : s)),
         ),
     };
+    // Past the rate-limit window, so HN is actually re-fetched.
     await runDigest(
       db,
       { hn: bumped, ai: keywordFilter("rust") },
       "rust",
       1,
       USER,
-      new Date(),
+      new Date(t0.getTime() + 6 * 60_000),
     );
     const row = await db.select().from(stories).where(eq(stories.id, 1));
     expect(row[0]?.score).toBe(999);
@@ -308,13 +310,14 @@ describe("runDigest", () => {
 
   it("evaluates only newly appeared stories at the same version", async () => {
     const db = getDb(env);
+    const t0 = new Date("2026-06-17T06:20:00Z");
     await runDigest(
       db,
       { hn: countingHn().hn, ai: keywordFilter("rust") },
       "rust",
       1,
       USER,
-      new Date(),
+      t0,
     );
     const withNew: HnClient = {
       frontPage: () =>
@@ -332,13 +335,14 @@ describe("runDigest", () => {
         ]),
     };
     const counter = countingFilter("rust");
+    // Past the rate-limit window, so the new story is fetched and picked up.
     await runDigest(
       db,
       { hn: withNew, ai: counter.ai },
       "rust",
       1,
       USER,
-      new Date(),
+      new Date(t0.getTime() + 6 * 60_000),
     );
     expect(counter.seen).toEqual([1]);
 
@@ -347,5 +351,98 @@ describe("runDigest", () => {
       .from(curations)
       .where(and(eq(curations.userEmail, USER), eq(curations.current, true)));
     expect(feed.map((c) => c.storyId).sort((a, b) => a - b)).toEqual([1, 3]);
+  });
+
+  it("reuses the cached snapshot without re-fetching HN within the window", async () => {
+    const db = getDb(env);
+    const t0 = new Date("2026-06-17T06:20:00Z");
+    await runDigest(
+      db,
+      { hn: countingHn().hn, ai: keywordFilter("rust") },
+      "rust",
+      1,
+      "a@x.test",
+      t0,
+    );
+
+    // A second user one minute later: no HN fetch, but they still get a feed
+    // built from the cached snapshot, evaluating their own (un-judged) candidates.
+    const hnB = countingHn();
+    const filterB = countingFilter("bitcoin");
+    await runDigest(
+      db,
+      { hn: hnB.hn, ai: filterB.ai },
+      "bitcoin",
+      1,
+      "b@x.test",
+      new Date(t0.getTime() + 60_000),
+    );
+    expect(hnB.fetches()).toBe(0);
+    expect(filterB.seen).toEqual([FRONT.length]);
+
+    const feedB = await db
+      .select()
+      .from(curations)
+      .where(
+        and(eq(curations.userEmail, "b@x.test"), eq(curations.current, true)),
+      );
+    expect(feedB.map((c) => c.storyId)).toEqual([2]);
+  });
+
+  it("sends nothing to the AI for a within-window re-run at the same version", async () => {
+    const db = getDb(env);
+    const t0 = new Date("2026-06-17T06:20:00Z");
+    await runDigest(
+      db,
+      { hn: countingHn().hn, ai: keywordFilter("rust") },
+      "rust",
+      1,
+      USER,
+      t0,
+    );
+
+    const hn = countingHn();
+    const again = countingFilter("rust");
+    const result = await runDigest(
+      db,
+      { hn: hn.hn, ai: again.ai },
+      "rust",
+      1,
+      USER,
+      new Date(t0.getTime() + 2 * 60_000),
+    );
+    expect(hn.fetches()).toBe(0);
+    expect(again.seen).toEqual([0]);
+    expect(result.count).toBe(1);
+
+    const feed = await db
+      .select()
+      .from(curations)
+      .where(and(eq(curations.userEmail, USER), eq(curations.current, true)));
+    expect(feed.map((c) => c.storyId)).toEqual([1]);
+  });
+
+  it("fetches HN again once the rate-limit window has elapsed", async () => {
+    const db = getDb(env);
+    const t0 = new Date("2026-06-17T06:20:00Z");
+    await runDigest(
+      db,
+      { hn: countingHn().hn, ai: keywordFilter("rust") },
+      "rust",
+      1,
+      USER,
+      t0,
+    );
+
+    const later = countingHn();
+    await runDigest(
+      db,
+      { hn: later.hn, ai: keywordFilter("rust") },
+      "rust",
+      1,
+      USER,
+      new Date(t0.getTime() + 6 * 60_000),
+    );
+    expect(later.fetches()).toBe(1);
   });
 });

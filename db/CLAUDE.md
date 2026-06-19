@@ -17,7 +17,9 @@ Rules:
 - The `meta/` folder is drizzle-kit's snapshot state — commit it, never edit it.
 - `stories` is a GLOBAL content cache keyed by the HN item id; rows are never
   deleted. `fetchedAt` records the last refresh — the whole front page is
-  re-fetched (Algolia, one request) and upserted on each digest run.
+  re-fetched (Algolia, one request) and upserted on each digest run, UNLESS the
+  latest `fetchedAt` is < 5 min old, in which case the run reuses that cached
+  snapshot instead of fetching (see worker/CLAUDE.md `RATE_LIMIT_MS`).
 - `curations` is PER-USER (composite PK `userEmail, storyId`), the feed/archive
   join table. `current` marks the live feed (older rows are the archive);
   `relevant` is the sticky AI verdict (persisted even when false, so a re-run can
