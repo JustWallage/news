@@ -2,11 +2,15 @@ import { Hono } from "hono";
 import { meSchema } from "../shared/api";
 import type { AppEnv } from "./env";
 import { createDeps } from "./lib/deps";
-import { runScheduledDigest } from "./lib/scheduled";
+import { runScheduledDigest, runTelegramDigests } from "./lib/scheduled";
 import { authMiddleware } from "./middleware/auth";
 import { digestRoutes } from "./routes/digest";
 import { preferencesRoutes } from "./routes/preferences";
 import { storiesRoutes } from "./routes/stories";
+import { telegramRoutes } from "./routes/telegram";
+import { telegramWebhookRoutes } from "./routes/telegram-webhook";
+
+const TELEGRAM_CRON = "*/5 * * * *";
 
 export const app = new Hono<AppEnv>();
 
@@ -25,10 +29,20 @@ app.get("/api/me", (c) =>
 app.route("/api/stories", storiesRoutes);
 app.route("/api/preferences", preferencesRoutes);
 app.route("/api/digest", digestRoutes);
+app.route("/api/telegram", telegramRoutes);
+
+// The Telegram webhook is intentionally NOT under /api: Telegram cannot present
+// a CF Access identity, so it sits outside the auth + deps middleware and is
+// guarded by its own secret-token check (see the route).
+app.route("/telegram", telegramWebhookRoutes);
 
 export default {
   fetch: app.fetch,
-  scheduled: (_controller, env, ctx) => {
-    ctx.waitUntil(runScheduledDigest(env));
+  scheduled: (controller, env, ctx) => {
+    const run =
+      controller.cron === TELEGRAM_CRON
+        ? runTelegramDigests(env, new Date(controller.scheduledTime))
+        : runScheduledDigest(env);
+    ctx.waitUntil(run);
   },
 } satisfies ExportedHandler<Env>;

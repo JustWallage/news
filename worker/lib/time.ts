@@ -23,3 +23,16 @@ export function amsterdamHour(now: Date): number {
   }).format(now);
   return Number(hour) % 24;
 }
+
+/** Minutes since midnight (0–1439) for the given instant in Amsterdam time. */
+export function amsterdamMinuteOfDay(now: Date): number {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const get = (type: string): number =>
+    Number(parts.find((p) => p.type === type)?.value ?? "0");
+  return (get("hour") % 24) * 60 + get("minute");
+}

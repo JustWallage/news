@@ -1,5 +1,6 @@
 import type { AiFilter, StoryInput } from "./digest";
 import type { HnClient } from "./hn";
+import type { TelegramClient } from "./telegram";
 
 // Deterministic stand-ins for the Algolia HN API + Workers AI, used in every
 // environment except production (see lib/deps.ts). They make `pnpm dev` show
@@ -82,6 +83,15 @@ const CANNED: StoryInput[] = [...FEATURED, ...FILLER];
 
 export const fakeHnClient: HnClient = {
   frontPage: () => Promise.resolve(CANNED),
+};
+
+// No-op Telegram client for every environment without a bot token (local, e2e,
+// unit). Tests that assert outgoing messages inject their own recording client.
+export const fakeTelegramClient: TelegramClient = {
+  sendMessage: (chatId) => {
+    console.log(`[telegram] (fake) sendMessage to ${chatId}`);
+    return Promise.resolve();
+  },
 };
 
 // Marks a story relevant when its title contains any word (>= 3 chars) from the

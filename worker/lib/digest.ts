@@ -60,6 +60,35 @@ export async function loadPreferences(
   return { text: row?.text ?? "", version: row?.version ?? 0 };
 }
 
+// Upsert the preferences text, bumping `version` only on a real change (a no-op
+// resave must not force a needless full re-evaluation on the next digest).
+// Shared by the PUT route and the Telegram /set-preferences command.
+export async function savePreferences(
+  db: Db,
+  userEmail: string,
+  text: string,
+): Promise<void> {
+  const rows = await db
+    .select()
+    .from(preferences)
+    .where(eq(preferences.userEmail, userEmail))
+    .limit(1);
+  const existing = rows[0] ?? null;
+  if (existing !== null && existing.text === text) {
+    return;
+  }
+  if (existing === null) {
+    await db
+      .insert(preferences)
+      .values({ userEmail, text, updatedAt: new Date() });
+  } else {
+    await db
+      .update(preferences)
+      .set({ text, version: existing.version + 1, updatedAt: new Date() })
+      .where(eq(preferences.userEmail, userEmail));
+  }
+}
+
 export interface DigestResult {
   count: number;
 }

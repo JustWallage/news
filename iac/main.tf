@@ -78,6 +78,26 @@ resource "cloudflare_zero_trust_access_application" "news" {
   }]
 }
 
+# Telegram delivers webhook updates to /telegram/webhook, which cannot present a
+# CF Access identity. A path-scoped application with a bypass policy lets those
+# requests through (a more specific path takes precedence over the hostname app
+# above); the worker still authenticates them with its secret-token check.
+resource "cloudflare_zero_trust_access_application" "telegram_webhook" {
+  count = local.custom_domain_active ? 1 : 0
+
+  account_id       = var.cloudflare_account_id
+  name             = "news-telegram-webhook"
+  domain           = "${var.custom_domain}/telegram/webhook"
+  type             = "self_hosted"
+  session_duration = "730h"
+
+  policies = [{
+    name     = "Bypass for Telegram webhook"
+    decision = "bypass"
+    include  = [{ everyone = {} }]
+  }]
+}
+
 # NOTE: the Workers custom domain (news.justwallage.nl → the worker) is created
 # by wrangler at deploy time, NOT here. Terraform runs before the worker exists,
 # so a cloudflare_workers_custom_domain resource 404s on the first deploy. See

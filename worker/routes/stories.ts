@@ -1,47 +1,18 @@
 import { and, desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { curations, stories } from "../../db/schema";
+import { curations } from "../../db/schema";
 import type { AppEnv } from "../env";
 import { getDb } from "../lib/db";
+import { curatedStories, loadFeed } from "../lib/feed";
 import { toStory } from "../lib/serialize";
 
 export const storiesRoutes = new Hono<AppEnv>();
 
-// The user's curated stories (feed or archive) joined to the shared content
-// cache; the caller adds the ordering.
-function curatedStories(
-  db: ReturnType<typeof getDb>,
-  userEmail: string,
-  current: boolean,
-) {
-  return db
-    .select({
-      id: stories.id,
-      title: stories.title,
-      url: stories.url,
-      by: stories.by,
-      score: stories.score,
-      comments: stories.comments,
-      time: stories.time,
-      relevanceScore: curations.relevanceScore,
-      reason: curations.reason,
-      openedAt: curations.openedAt,
-    })
-    .from(curations)
-    .innerJoin(stories, eq(curations.storyId, stories.id))
-    .where(
-      and(eq(curations.userEmail, userEmail), eq(curations.current, current)),
-    );
-}
-
-// The signed-in user's current feed: best matches first.
+// The signed-in user's current feed: their curated stories joined to the shared
+// content cache, best matches first.
 storiesRoutes.get("/", async (c) => {
-  const rows = await curatedStories(
-    getDb(c.env),
-    c.get("userEmail"),
-    true,
-  ).orderBy(desc(curations.relevanceScore), desc(stories.score));
-  return c.json({ stories: rows.map(toStory) });
+  const db = getDb(c.env);
+  return c.json({ stories: await loadFeed(db, c.get("userEmail")) });
 });
 
 // The user's archive: curations the daily digest displaced (current = false).

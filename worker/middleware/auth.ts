@@ -1,4 +1,5 @@
 import { createMiddleware } from "hono/factory";
+import { timingSafeEqual } from "../lib/crypto";
 
 /**
  * THE ONLY place identity is resolved. Routes must read identity exclusively
@@ -21,24 +22,6 @@ export interface AuthBindings {
 interface AuthEnv {
   Bindings: AuthBindings;
   Variables: { userEmail: string };
-}
-
-const encoder = new TextEncoder();
-
-// Compares SHA-256 digests so inputs of different lengths are safe and the
-// comparison itself is constant-time.
-async function timingSafeEqual(a: string, b: string): Promise<boolean> {
-  const [digestA, digestB] = await Promise.all([
-    crypto.subtle.digest("SHA-256", encoder.encode(a)),
-    crypto.subtle.digest("SHA-256", encoder.encode(b)),
-  ]);
-  const bytesA = new Uint8Array(digestA);
-  const bytesB = new Uint8Array(digestB);
-  let diff = 0;
-  for (let i = 0; i < bytesA.length; i++) {
-    diff |= (bytesA[i] ?? 0) ^ (bytesB[i] ?? 0);
-  }
-  return diff === 0;
 }
 
 export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {

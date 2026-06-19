@@ -15,6 +15,10 @@
   Routes: `/` (HomePage, current feed), `/archive` (ArchivePage, displaced
   curations via `GET /api/stories/archive` — its own `useCachedFetch`, NOT in
   `FeedContext`), `/preferences` (PreferencesPage).
+- PreferencesPage's `TelegramSection` reads `/api/telegram` status (shows the
+  connected chat label), POSTs `/api/telegram/link-code` to reveal a
+  `/start <code>` connect code, and POSTs `/api/telegram/test` for the Send test
+  message button; daily times themselves are set from the bot, not the web UI.
 - `components/ui/` is shadcn-generated (Base UI primitives, NOT Radix — pass
   `render={<a />}` plus `nativeButton={false}` for a link-button, not `asChild`).
   It is exempt from lint and knip; regenerate via `pnpm dlx shadcn@latest add`.

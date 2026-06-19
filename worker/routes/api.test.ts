@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
+import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { curations, preferences, stories } from "../../db/schema";
+import { curations, preferences, stories, telegram } from "../../db/schema";
 import { getDb } from "../lib/db";
 import { app } from "../index";
 
@@ -24,6 +25,7 @@ beforeEach(async () => {
   await db.delete(curations);
   await db.delete(stories);
   await db.delete(preferences);
+  await db.delete(telegram);
 });
 
 describe("api", () => {
@@ -79,6 +81,114 @@ describe("api", () => {
       stories: { openedAt: string | null }[];
     }>();
     expect(after.stories[0]?.openedAt).not.toBeNull();
+  });
+
+  it("reports Telegram status and mints a link code", async () => {
+    const before = await (
+      await app.request("/api/telegram", get, env)
+    ).json<{
+      linked: boolean;
+      chatLabel: string | null;
+      slots: (string | null)[];
+    }>();
+    expect(before).toEqual({
+      linked: false,
+      chatLabel: null,
+      slots: [null, null, null],
+    });
+
+    const minted = await (
+      await app.request("/api/telegram/link-code", json("POST", {}), env)
+    ).json<{ code: string; url: string | null; expiresAt: string }>();
+    expect(minted.code).toMatch(/^[0-9a-f]{8}$/);
+    expect(minted.url).toBeNull();
+
+    const stored = await getDb(env)
+      .select()
+      .from(telegram)
+      .where(eq(telegram.userEmail, EMAIL));
+    expect(stored[0]?.linkCode).toBe(minted.code);
+  });
+
+  it("links a chat through the webhook with the right secret", async () => {
+    const minted = await (
+      await app.request("/api/telegram/link-code", json("POST", {}), env)
+    ).json<{ code: string }>();
+
+    const webhook = (secret: string | null, body: unknown): RequestInit => ({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(secret === null
+          ? {}
+          : { "X-Telegram-Bot-Api-Secret-Token": secret }),
+      },
+      body: JSON.stringify(body),
+    });
+    const update = {
+      message: {
+        chat: { id: 777, username: "just" },
+        text: `/start ${minted.code}`,
+      },
+    };
+
+    const wrong = await app.request(
+      "/telegram/webhook",
+      webhook("wrong", update),
+      env,
+    );
+    expect(wrong.status).toBe(403);
+
+    const missing = await app.request(
+      "/telegram/webhook",
+      webhook(null, update),
+      env,
+    );
+    expect(missing.status).toBe(403);
+
+    const ok = await app.request(
+      "/telegram/webhook",
+      webhook("unit-webhook-secret", update),
+      env,
+    );
+    expect(ok.status).toBe(200);
+
+    const status = await (
+      await app.request("/api/telegram", get, env)
+    ).json<{ linked: boolean; chatLabel: string | null }>();
+    expect(status.linked).toBe(true);
+    expect(status.chatLabel).toBe("@just");
+  });
+
+  it("rejects a test message until a chat is linked", async () => {
+    const notLinked = await app.request(
+      "/api/telegram/test",
+      json("POST", {}),
+      env,
+    );
+    expect(notLinked.status).toBe(409);
+
+    const minted = await (
+      await app.request("/api/telegram/link-code", json("POST", {}), env)
+    ).json<{ code: string }>();
+    const linkUpdate = {
+      message: { chat: { id: 888 }, text: `/start ${minted.code}` },
+    };
+    await app.request(
+      "/telegram/webhook",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Telegram-Bot-Api-Secret-Token": "unit-webhook-secret",
+        },
+        body: JSON.stringify(linkUpdate),
+      },
+      env,
+    );
+
+    const sent = await app.request("/api/telegram/test", json("POST", {}), env);
+    expect(sent.status).toBe(200);
   });
 
   it("re-curates against new preferences after an edit", async () => {

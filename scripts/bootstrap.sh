@@ -18,6 +18,13 @@ REQUIRED_KEYS=(
   CUSTOM_DOMAIN_ZONE_ID
 )
 
+# Pushed only when present — the Telegram bot is optional. deploy.yml puts these
+# onto the production worker as secrets.
+OPTIONAL_KEYS=(
+  TELEGRAM_BOT_TOKEN
+  TELEGRAM_WEBHOOK_SECRET
+)
+
 say() { printf '\033[1;32m[bootstrap]\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m[bootstrap]\033[0m %s\n' "$*" >&2; exit 1; }
 
@@ -48,6 +55,14 @@ for key in "${REQUIRED_KEYS[@]}"; do
   # value from stdin; `--body -` would set the literal string "-"
   printf '%s' "${!key}" | gh secret set "$key"
   say "  secret $key set"
+done
+for key in "${OPTIONAL_KEYS[@]}"; do
+  if [ -n "${!key:-}" ]; then
+    printf '%s' "${!key}" | gh secret set "$key"
+    say "  secret $key set"
+  else
+    say "  secret $key not set (optional) — skipping"
+  fi
 done
 
 # --- Local dev ----------------------------------------------------------------

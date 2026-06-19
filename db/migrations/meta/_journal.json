@@ -15,6 +15,13 @@
       "when": 1781724122308,
       "tag": "0001_thick_toro",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1781850859461,
+      "tag": "0002_furry_galactus",
+      "breakpoints": true
     }
   ]
 }

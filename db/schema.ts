@@ -3,6 +3,7 @@ import {
   primaryKey,
   sqliteTable,
   text,
+  uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
 // Global, persistent cache of story CONTENT, keyed by the Hacker News item id.
@@ -51,6 +52,27 @@ export const preferences = sqliteTable("preferences", {
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 
+// One row per user linking a Telegram chat to the account. The webhook looks
+// chats up by chatId; linkCode holds the pending one-time code minted by the
+// web UI (cleared once /start consumes it). slot1-3 are daily-summary times as
+// minute-of-day (0-1439, rounded to 5); null means that slot is unset.
+export const telegram = sqliteTable(
+  "telegram",
+  {
+    userEmail: text("user_email").primaryKey(),
+    chatId: integer("chat_id"),
+    chatUsername: text("chat_username"),
+    chatName: text("chat_name"),
+    linkCode: text("link_code"),
+    linkCodeExpiresAt: integer("link_code_expires_at", { mode: "timestamp" }),
+    slot1: integer("slot1"),
+    slot2: integer("slot2"),
+    slot3: integer("slot3"),
+  },
+  (t) => [uniqueIndex("telegram_chat_id_idx").on(t.chatId)],
+);
+
 export type StoryRow = typeof stories.$inferSelect;
 export type CurationRow = typeof curations.$inferSelect;
 export type PreferenceRow = typeof preferences.$inferSelect;
+export type TelegramRow = typeof telegram.$inferSelect;

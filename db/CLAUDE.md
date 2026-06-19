@@ -19,11 +19,16 @@ Rules:
   deleted. `fetchedAt` records the last refresh — the whole front page is
   re-fetched (Algolia, one request) and upserted on each digest run.
 - `curations` is PER-USER (composite PK `userEmail, storyId`), the feed/archive
-  join table. `current` marks the live feed; `relevant` is the sticky AI verdict
-  (persisted even when false, so a re-run can skip it); `pref_version` is the
-  `preferences.version` the verdict was produced against. `current = true` implies
-  `relevant` (see worker/CLAUDE.md for the digest's version-skip rule).
+  join table. `current` marks the live feed (older rows are the archive);
+  `relevant` is the sticky AI verdict (persisted even when false, so a re-run can
+  skip it); `pref_version` is the `preferences.version` the verdict was produced
+  against. `current = true` implies `relevant` (see worker/CLAUDE.md for the
+  digest's version-skip rule).
 - `preferences.version` is a monotonic counter bumped on every real edit (not on
   a no-op resave); the digest stamps it onto each curation as `pref_version`.
+- `telegram` is PER-USER (PK `userEmail`, unique `chatId`): the chat link
+  (`chatId` + `chatUsername`/`chatName` captured at `/start`), the pending
+  one-time `linkCode`/`linkCodeExpiresAt`, and three nullable slot columns
+  (daily-summary minute-of-day 0–1439; null = unset).
 - Timestamps are epoch integers via `{ mode: "timestamp" }` (surface as `Date`);
   `current`/`relevant` are `{ mode: "boolean" }` integers.

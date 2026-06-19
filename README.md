@@ -35,8 +35,15 @@ button or `await fetch("/api/digest/run", { method: "POST" })`.
 ## Pages
 
 - **`/`** — the curated feed (the latest morning's picks).
-- **`/preferences`** — your signed-in identity, a logout link, and a big
-  plain-text box describing what you want to read.
+- **`/preferences`** — your signed-in identity, a logout link, a big plain-text
+  box describing what you want to read, and a Connect Telegram button.
+
+## Telegram bot
+
+Link a Telegram chat (Connect Telegram → send the bot `/start <code>`) to manage
+the app from chat: `/set-preferences`, `/cur-preferences`, and up to three
+`/daily-time HH:MM` slots. Each slot re-runs the digest and pushes the fresh
+picks to the chat. Setup is in [docs/BOOTSTRAP.md](docs/BOOTSTRAP.md).
 
 ## Setup & deploy
 
