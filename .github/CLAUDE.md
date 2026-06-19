@@ -17,3 +17,6 @@ Trunk-based pipeline; reusable jobs via `workflow_call`.
   CLOUDFLARE_API_TOKEN, CLOUDFLARE_R2_ACCESS_KEY_ID,
   CLOUDFLARE_R2_SECRET_ACCESS_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
   TEST_AUTH_TOKEN, WORKERS_DEV_SUBDOMAIN, CUSTOM_DOMAIN_ZONE_ID.
+- Optional repo secrets for the Telegram bot: TELEGRAM_BOT_TOKEN,
+  TELEGRAM_WEBHOOK_SECRET. The `deploy-prod` job pushes them onto the worker via
+  `wrangler secret put` after deploy (skipped when unset → bot stays disabled).

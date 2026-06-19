@@ -164,7 +164,9 @@ the per-slot bucket occurs once per day so no dedup state is needed.
 - `wrangler.jsonc`: `run_worker_first: ["/api/*", "/telegram/*"]`; production
   cron adds `"*/5 * * * *"`; vars add `APP_URL` (local/e2e/prod) and
   `TELEGRAM_BOT_USERNAME` (public, prod). Secrets `TELEGRAM_BOT_TOKEN` and
-  `TELEGRAM_WEBHOOK_SECRET` are set out of band (bootstrap), typed optional.
+  `TELEGRAM_WEBHOOK_SECRET` are GHA secrets (typed optional); the `deploy-prod`
+  job installs them onto the worker with `wrangler secret put` after deploy,
+  skipping each when unset so the bot stays optional.
 - `iac/main.tf`: path-scoped `cloudflare_zero_trust_access_application` on
   `<custom_domain>/telegram/webhook` with a single **bypass** (everyone) policy,
   gated on `custom_domain_active` like the main app.

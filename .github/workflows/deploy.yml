@@ -106,3 +106,20 @@ jobs:
 
       - name: Deploy
         run: pnpm exec wrangler deploy -c dist/news/wrangler.json
+
+      # Push the Telegram bot credentials onto the just-deployed worker. Both are
+      # optional — when the GHA secrets are unset the bot simply stays disabled
+      # (createDeps falls back to the no-op client; the webhook fails closed).
+      - name: Set Telegram worker secrets
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+        run: |
+          if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
+            printf '%s' "$TELEGRAM_BOT_TOKEN" \
+              | pnpm exec wrangler secret put TELEGRAM_BOT_TOKEN -c dist/news/wrangler.json
+          fi
+          if [ -n "$TELEGRAM_WEBHOOK_SECRET" ]; then
+            printf '%s' "$TELEGRAM_WEBHOOK_SECRET" \
+              | pnpm exec wrangler secret put TELEGRAM_WEBHOOK_SECRET -c dist/news/wrangler.json
+          fi

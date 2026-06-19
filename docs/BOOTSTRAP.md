@@ -85,20 +85,24 @@ After that the cron refreshes the feed every morning at 06:20 Europe/Amsterdam.
 ## 8. Telegram bot (optional)
 
 The bot lets you set preferences and schedule up to three daily summaries from
-Telegram. Its credentials are **worker secrets** set directly on the production
-worker (CI does not manage them), not GitHub Actions secrets.
+Telegram. Its two credentials are **GitHub Actions secrets**; the deploy
+pipeline installs them onto the production worker on every deploy (and skips the
+bot when they are unset).
 
 1. Create a bot with [@BotFather](https://t.me/BotFather) (`/newbot`). Copy the
    HTTP API token and the bot's `@username`.
 2. Put `TELEGRAM_BOT_USERNAME` (without the `@`) into `wrangler.jsonc` →
    `env.production.vars` so the app can build `t.me` deep links.
-3. Set the two secrets on the production worker (run once; pick any random
-   string for the webhook secret, e.g. `openssl rand -hex 32`):
+3. Set the two secrets (pick any random string for the webhook secret, e.g.
+   `openssl rand -hex 32`). Either add them to `.bootstrap.env` and re-run
+   `./scripts/bootstrap.sh`, or set them directly:
 
    ```sh
-   pnpm exec wrangler secret put TELEGRAM_BOT_TOKEN --env production
-   pnpm exec wrangler secret put TELEGRAM_WEBHOOK_SECRET --env production
+   gh secret set TELEGRAM_BOT_TOKEN
+   gh secret set TELEGRAM_WEBHOOK_SECRET
    ```
+
+   The next push to `main` deploys and installs them onto the worker.
 
 4. Register the webhook with Telegram (uses the same secret so the worker can
    verify each call):
