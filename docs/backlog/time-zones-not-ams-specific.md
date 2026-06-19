@@ -1,0 +1,1 @@
+I don't like this function amsterdamMinuteOfDay, instead it should somehow be dynamic depending on the user's location. (either ask the user their timezone, or somehow extract it from their account/telegram)
