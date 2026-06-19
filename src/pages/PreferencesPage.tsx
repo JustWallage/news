@@ -20,6 +20,7 @@ function TelegramSection() {
   const [test, setTest] = useState<"idle" | "sending" | "sent" | "error">(
     "idle",
   );
+  const [copied, setCopied] = useState(false);
 
   const connect = (): void => {
     setPending(true);
@@ -28,7 +29,10 @@ function TelegramSection() {
       telegramLinkCodeSchema,
       jsonInit("POST", {}),
     )
-      .then(setCode)
+      .then((next) => {
+        setCode(next);
+        setCopied(false);
+      })
       .catch(() => {
         setCode(null);
       })
@@ -48,30 +52,56 @@ function TelegramSection() {
       });
   };
 
+  const copy = (): void => {
+    if (code === null) {
+      return;
+    }
+    navigator.clipboard
+      .writeText(`/start ${code.code}`)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => {
+          setCopied(false);
+        }, 2000);
+      })
+      .catch(() => {
+        // Clipboard denied — leave the button showing "Copy".
+      });
+  };
+
   const linked = data?.linked === true;
   const label = data?.chatLabel ?? null;
   const slots = data?.slots.filter((s): s is string => s !== null) ?? [];
-
-  let statusText: string;
-  if (!linked) {
-    statusText =
-      "Get your summaries in Telegram. Generate a code, then send the bot /start <code>.";
-  } else {
-    const who = label === null ? "Connected." : `Connected as ${label}.`;
-    const when =
-      slots.length > 0
-        ? ` Daily summaries at ${slots.join(", ")}.`
-        : " Set summary times in the bot with /daily-time.";
-    statusText = who + when;
-  }
+  const who = label === null ? "Connected." : `Connected as ${label}.`;
+  const when =
+    slots.length > 0
+      ? ` Daily summaries at ${slots.join(", ")}.`
+      : " Set summary times in the bot with /daily_time.";
 
   return (
-    <div className="space-y-2 border-t pt-4">
-      <Label>Telegram</Label>
-      <p className="text-sm text-muted-foreground">{statusText}</p>
-      <div className="flex items-center gap-3">
-        <Button variant="outline" onClick={connect} disabled={pending}>
-          {linked ? "Reconnect Telegram" : "Connect Telegram"}
+    <div className="space-y-4 border-t pt-5">
+      <div className="space-y-1">
+        <Label>Telegram</Label>
+        <p className="text-sm text-muted-foreground">
+          Get your daily news summaries in Telegram.
+        </p>
+      </div>
+
+      {linked && <p className="text-sm text-muted-foreground">{who + when}</p>}
+
+      <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+        <li>Generate your start command below.</li>
+        <li>Copy it and open the bot.</li>
+        <li>Send the command to the bot to connect.</li>
+      </ol>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Button onClick={connect} disabled={pending}>
+          {pending
+            ? "Generating…"
+            : code === null
+              ? "Generate start command"
+              : "Regenerate"}
         </Button>
         {linked && (
           <Button
@@ -89,27 +119,30 @@ function TelegramSection() {
           <span className="text-sm text-destructive">Could not send.</span>
         )}
       </div>
+
       {code !== null && (
-        <div className="space-y-1 text-sm">
-          <p>
-            Send the bot{" "}
-            <code className="rounded bg-muted px-1 py-0.5">
+        <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <code className="rounded bg-muted px-2 py-1 text-sm">
               /start {code.code}
             </code>
-            {code.url !== null && (
-              <>
-                {" "}
-                or{" "}
-                <a className="underline" href={code.url}>
-                  open the bot
-                </a>
-              </>
-            )}
-            .
+            <Button variant="outline" size="sm" onClick={copy}>
+              {copied ? "Copied" : "Copy"}
+            </Button>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Send this to the bot to connect. This code expires in 15 minutes.
           </p>
-          <p className="text-muted-foreground">
-            This code expires in 15 minutes.
-          </p>
+          {code.url !== null && (
+            <a
+              href={code.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonVariants({ size: "lg" })}
+            >
+              Open the bot
+            </a>
+          )}
         </div>
       )}
     </div>

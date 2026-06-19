@@ -97,7 +97,7 @@ describe("handleTelegramUpdate", () => {
 
   it("rejects commands from an unlinked chat", async () => {
     const db = getDb(env);
-    const res = await handleTelegramUpdate(db, message("/cur-preferences"));
+    const res = await handleTelegramUpdate(db, message("/cur_preferences"));
     expect(res?.reply).toContain("not linked");
   });
 
@@ -115,14 +115,27 @@ describe("handleTelegramUpdate", () => {
     expect(who?.reply).toContain(USER);
   });
 
-  it("acks /fetch-feed and flags the feed to run for the linked account", async () => {
+  it("acks /fetch and flags the feed to run for the linked account", async () => {
     const db = getDb(env);
     const { code } = await mintLinkCode(db, USER, new Date());
     await handleTelegramUpdate(db, message(`/start ${code}`));
 
-    const res = await handleTelegramUpdate(db, message("/fetch-feed"));
+    const res = await handleTelegramUpdate(db, message("/fetch"));
     expect(res?.reply).toContain("few seconds");
     expect(res?.feedFor).toBe(USER);
+  });
+
+  it("answers /help and falls back to help for unknown commands", async () => {
+    const db = getDb(env);
+    const { code } = await mintLinkCode(db, USER, new Date());
+    await handleTelegramUpdate(db, message(`/start ${code}`));
+
+    const help = await handleTelegramUpdate(db, message("/help"));
+    expect(help?.reply).toContain("/fetch");
+    expect(help?.reply).toContain("/help");
+
+    const unknown = await handleTelegramUpdate(db, message("/bogus"));
+    expect(unknown?.reply).toBe(help?.reply);
   });
 
   it("falls back to the name when the chat has no username", async () => {
@@ -142,7 +155,7 @@ describe("handleTelegramUpdate", () => {
 
     const set = await handleTelegramUpdate(
       db,
-      message("/set-preferences rust and self-hosting"),
+      message("/set_preferences rust and self-hosting"),
     );
     expect(set?.reply).toContain("updated");
     const stored = await db
@@ -151,7 +164,7 @@ describe("handleTelegramUpdate", () => {
       .where(eq(preferences.userEmail, USER));
     expect(stored[0]?.text).toBe("rust and self-hosting");
 
-    const cur = await handleTelegramUpdate(db, message("/cur-preferences"));
+    const cur = await handleTelegramUpdate(db, message("/cur_preferences"));
     expect(cur?.reply).toBe("rust and self-hosting");
   });
 
@@ -160,7 +173,7 @@ describe("handleTelegramUpdate", () => {
     const { code } = await mintLinkCode(db, USER, new Date());
     await handleTelegramUpdate(db, message(`/start ${code}`));
 
-    const set = await handleTelegramUpdate(db, message("/daily-time-2 08:32"));
+    const set = await handleTelegramUpdate(db, message("/daily_time_2 08:32"));
     expect(set?.reply).toContain("08:30");
     expect((await loadTelegramStatus(db, USER)).slots).toEqual([
       null,
@@ -168,10 +181,10 @@ describe("handleTelegramUpdate", () => {
       null,
     ]);
 
-    const show = await handleTelegramUpdate(db, message("/daily-time-2"));
+    const show = await handleTelegramUpdate(db, message("/daily_time_2"));
     expect(show?.reply).toContain("08:30");
 
-    await handleTelegramUpdate(db, message("/daily-time-2 off"));
+    await handleTelegramUpdate(db, message("/daily_time_2 off"));
     expect((await loadTelegramStatus(db, USER)).slots[1]).toBeNull();
   });
 

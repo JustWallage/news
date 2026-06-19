@@ -1,0 +1,30 @@
+{
+  "commands": [
+    { "command": "user", "description": "Show the connected account" },
+    {
+      "command": "fetch",
+      "description": "Fetch a fresh feed now and send it here"
+    },
+    {
+      "command": "set_preferences",
+      "description": "Set what you want to read"
+    },
+    {
+      "command": "cur_preferences",
+      "description": "Show your current preferences"
+    },
+    {
+      "command": "daily_time",
+      "description": "Set a daily summary time (HH:MM, or off)"
+    },
+    {
+      "command": "daily_time_2",
+      "description": "Set a second daily summary time"
+    },
+    {
+      "command": "daily_time_3",
+      "description": "Set a third daily summary time"
+    },
+    { "command": "help", "description": "Show available commands" }
+  ]
+}

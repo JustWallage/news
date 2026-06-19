@@ -123,3 +123,17 @@ jobs:
             printf '%s' "$TELEGRAM_WEBHOOK_SECRET" \
               | pnpm exec wrangler secret put TELEGRAM_WEBHOOK_SECRET -c dist/news/wrangler.json
           fi
+
+      # Register the bot's slash-command list so Telegram shows autocomplete.
+      # Same token guard as above; the list is the single source of truth shared
+      # with the worker (worker/lib/bot-commands.json).
+      - name: Register Telegram bot commands
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
+            curl -fsS -X POST \
+              "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setMyCommands" \
+              -H "Content-Type: application/json" \
+              --data @worker/lib/bot-commands.json
+          fi
