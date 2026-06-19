@@ -41,7 +41,7 @@ telegramWebhookRoutes.post("/webhook", async (c) => {
   if (result !== null) {
     const deps = createDeps(c.env);
     await deps.telegram.sendMessage(result.chatId, result.reply);
-    // /fetch-feed: run the digest and send the feed after acking — it takes a
+    // /fetch: run the digest and send the feed after acking — it takes a
     // few seconds, so it runs in the background rather than blocking the reply.
     if (result.feedFor !== undefined) {
       c.executionCtx.waitUntil(

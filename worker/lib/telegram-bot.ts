@@ -175,7 +175,7 @@ async function setPreferences(
   text: string,
 ): Promise<string> {
   if (text === "") {
-    return "Add the text after the command: /set-preferences <your interests>";
+    return "Add the text after the command: /set_preferences <your interests>";
   }
   await savePreferences(db, userEmail, text);
   return "✅ Preferences updated.";
