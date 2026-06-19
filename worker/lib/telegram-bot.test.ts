@@ -115,6 +115,16 @@ describe("handleTelegramUpdate", () => {
     expect(who?.reply).toContain(USER);
   });
 
+  it("acks /fetch-feed and flags the feed to run for the linked account", async () => {
+    const db = getDb(env);
+    const { code } = await mintLinkCode(db, USER, new Date());
+    await handleTelegramUpdate(db, message(`/start ${code}`));
+
+    const res = await handleTelegramUpdate(db, message("/fetch-feed"));
+    expect(res?.reply).toContain("few seconds");
+    expect(res?.feedFor).toBe(USER);
+  });
+
   it("falls back to the name when the chat has no username", async () => {
     const db = getDb(env);
     const { code } = await mintLinkCode(db, USER, new Date());

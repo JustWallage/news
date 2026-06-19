@@ -120,6 +120,9 @@ Commands (chat must be linked except `/start <code>`):
   (capturing the chat username/name); clears the code. Invalid/expired → error
   reply. `/start` alone → greeting.
 - `/user` — reply with the connected account's email.
+- `/fetch-feed` — ack immediately ("fetching… a few seconds"), then run a digest
+  for the account and send the feed to the chat in the background (`waitUntil`,
+  reusing `sendDailyDigest`).
 - `/set-preferences <text>` — upsert the preferences blob; confirm.
 - `/cur-preferences` — reply with the current text (or "none set").
 - `/daily-time [HH:MM | off]` — no arg shows the current slot; `HH:MM` sets it

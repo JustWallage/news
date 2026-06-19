@@ -37,6 +37,8 @@ no `ENVIRONMENT`/`isTest` checks leak into logic, and there is no test-only rout
   `POST /api/telegram/link-code` (15-min expiry) and captures the chat
   username/name for `chatLabel` (Telegram does not expose phone numbers to bots).
   `POST /api/telegram/test` sends a test message via `c.var.deps.telegram`.
+  `/fetch-feed` acks immediately, then the webhook runs `sendDailyDigest` in
+  `c.executionCtx.waitUntil` (the digest takes seconds — don't block the ack).
 - Slot times are minute-of-day rounded to 5 (`parseDailyTime`).
 
 ## Data model & invariants

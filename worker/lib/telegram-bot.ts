@@ -18,6 +18,7 @@ interface ChatIdentity {
 const HELP = [
   "Commands:",
   "/user — show the connected account",
+  "/fetch-feed — fetch a fresh feed now and send it here",
   "/set-preferences <text> — set what you want to read",
   "/cur-preferences — show your current preferences",
   "/daily-time HH:MM — daily summary time (or 'off' to clear)",
@@ -234,6 +235,15 @@ async function setSlot(
     : `✅ ${label} set to ${formatMinuteOfDay(value)}.`;
 }
 
+export interface TelegramReply {
+  chatId: number;
+  reply: string;
+  // When set, the caller acknowledges `reply`, then runs a digest for this user
+  // and sends the resulting feed to `chatId` in the background (it takes a few
+  // seconds). Kept off the synchronous reply so the webhook acks Telegram fast.
+  feedFor?: string;
+}
+
 // Resolves an incoming update to the reply to send back, applying any side
 // effects (linking, preferences, slots). Returns null for updates the bot
 // ignores (non-message, non-command). Pure with respect to Telegram itself —
@@ -241,7 +251,7 @@ async function setSlot(
 export async function handleTelegramUpdate(
   db: Db,
   update: TelegramUpdate,
-): Promise<{ chatId: number; reply: string } | null> {
+): Promise<TelegramReply | null> {
   const message = update.message;
   if (message === undefined) {
     return null;
@@ -274,6 +284,12 @@ export async function handleTelegramUpdate(
   switch (command) {
     case "/user":
       return { chatId, reply: `Connected account: ${row.userEmail}` };
+    case "/fetch-feed":
+      return {
+        chatId,
+        reply: "🔄 Fetching your latest feed — this may take a few seconds…",
+        feedFor: row.userEmail,
+      };
     case "/set-preferences":
       return { chatId, reply: await setPreferences(db, row.userEmail, arg) };
     case "/cur-preferences":

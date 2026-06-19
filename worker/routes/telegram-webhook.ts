@@ -3,6 +3,7 @@ import type { AppEnv } from "../env";
 import { timingSafeEqual } from "../lib/crypto";
 import { getDb } from "../lib/db";
 import { createDeps } from "../lib/deps";
+import { sendDailyDigest } from "../lib/scheduled";
 import { updateSchema } from "../lib/telegram";
 import { handleTelegramUpdate } from "../lib/telegram-bot";
 
@@ -38,7 +39,22 @@ telegramWebhookRoutes.post("/webhook", async (c) => {
   const db = getDb(c.env);
   const result = await handleTelegramUpdate(db, parsed.data);
   if (result !== null) {
-    await createDeps(c.env).telegram.sendMessage(result.chatId, result.reply);
+    const deps = createDeps(c.env);
+    await deps.telegram.sendMessage(result.chatId, result.reply);
+    // /fetch-feed: run the digest and send the feed after acking — it takes a
+    // few seconds, so it runs in the background rather than blocking the reply.
+    if (result.feedFor !== undefined) {
+      c.executionCtx.waitUntil(
+        sendDailyDigest(
+          db,
+          deps,
+          result.feedFor,
+          result.chatId,
+          c.env.APP_URL,
+          new Date(),
+        ),
+      );
+    }
   }
   return c.json({ ok: true });
 });
