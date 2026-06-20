@@ -65,6 +65,31 @@ export function parseDailyTime(arg: string): number | "off" | null {
   return (Math.round((hours * 60 + minutes) / 5) * 5) % 1440;
 }
 
+// Persist the three daily-summary slots from the web UI. Each entry is "HH:MM"
+// (already validated by the schema) rounded to the nearest 5 minutes, or null to
+// clear that slot. Updates the existing row, so the chat must already be linked.
+export async function saveSlots(
+  db: Db,
+  userEmail: string,
+  slots: (string | null)[],
+): Promise<void> {
+  const minute = (value: string | null | undefined): number | null => {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    const parsed = parseDailyTime(value);
+    return typeof parsed === "number" ? parsed : null;
+  };
+  await db
+    .update(telegram)
+    .set({
+      slot1: minute(slots[0]),
+      slot2: minute(slots[1]),
+      slot3: minute(slots[2]),
+    })
+    .where(eq(telegram.userEmail, userEmail));
+}
+
 /** True when any configured slot matches the given minute-of-day. */
 export function dueSlot(row: TelegramRow, minute: number): boolean {
   return [row.slot1, row.slot2, row.slot3].some((slot) => slot === minute);

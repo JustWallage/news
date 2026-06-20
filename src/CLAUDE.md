@@ -18,7 +18,10 @@
 - PreferencesPage's `TelegramSection` reads `/api/telegram` status (shows the
   connected chat label), POSTs `/api/telegram/link-code` to reveal a
   `/start <code>` connect code, and POSTs `/api/telegram/test` for the Send test
-  message button; daily times themselves are set from the bot, not the web UI.
+  message button. When linked, it also shows three `type="time"` inputs (seeded
+  pristine via a `slotsDirty` ref, same pattern as the prefs textarea) that PUT
+  `/api/telegram/slots`; the editor is hidden until a chat is linked. Times can
+  still be set from the bot too.
 - `components/ui/` is shadcn-generated (Base UI primitives, NOT Radix — pass
   `render={<a />}` plus `nativeButton={false}` for a link-button, not `asChild`).
   It is exempt from lint and knip; regenerate via `pnpm dlx shadcn@latest add`.
