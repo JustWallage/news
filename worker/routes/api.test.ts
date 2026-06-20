@@ -160,6 +160,52 @@ describe("api", () => {
     expect(status.chatLabel).toBe("@just");
   });
 
+  it("sets daily-summary slots only once a chat is linked", async () => {
+    const notLinked = await app.request(
+      "/api/telegram/slots",
+      json("PUT", { slots: ["08:00", null, null] }),
+      env,
+    );
+    expect(notLinked.status).toBe(409);
+
+    const minted = await (
+      await app.request("/api/telegram/link-code", json("POST", {}), env)
+    ).json<{ code: string }>();
+    await app.request(
+      "/telegram/webhook",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Telegram-Bot-Api-Secret-Token": "unit-webhook-secret",
+        },
+        body: JSON.stringify({
+          message: { chat: { id: 555 }, text: `/start ${minted.code}` },
+        }),
+      },
+      env,
+    );
+
+    const bad = await app.request(
+      "/api/telegram/slots",
+      json("PUT", { slots: ["nope", null, null] }),
+      env,
+    );
+    expect(bad.status).toBe(400);
+
+    const ok = await app.request(
+      "/api/telegram/slots",
+      json("PUT", { slots: ["08:32", null, "20:00"] }),
+      env,
+    );
+    expect(ok.status).toBe(200);
+
+    const status = await (
+      await app.request("/api/telegram", get, env)
+    ).json<{ slots: (string | null)[] }>();
+    expect(status.slots).toEqual(["08:30", null, "20:00"]);
+  });
+
   it("rejects a test message until a chat is linked", async () => {
     const notLinked = await app.request(
       "/api/telegram/test",

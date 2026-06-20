@@ -56,22 +56,45 @@ function escapeHtml(text: string): string {
     .replace(/>/g, "&gt;");
 }
 
-function storyLink(story: Story): string {
-  return story.url ?? `https://news.ycombinator.com/item?id=${story.id}`;
+function itemLink(id: number): string {
+  return `https://news.ycombinator.com/item?id=${id}`;
 }
 
-// HTML message: one clickable title per line (best matches first, capped), then
-// a link back to the app. Web previews are disabled by the client.
+function userLink(by: string): string {
+  return `https://news.ycombinator.com/user?id=${encodeURIComponent(by)}`;
+}
+
+function storyLink(story: Story): string {
+  return story.url ?? itemLink(story.id);
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
+// Two lines per story: the clickable title, then a metadata line with the score
+// and links to the poster's HN profile and the HN comments page.
+function formatStory(s: Story): string {
+  const title = `<a href="${storyLink(s)}">${escapeHtml(s.title)}</a>`;
+  const meta = [
+    plural(s.score, "point"),
+    `by <a href="${userLink(s.by)}">${escapeHtml(s.by)}</a>`,
+    `<a href="${itemLink(s.id)}">${plural(s.comments, "comment")}</a>`,
+  ].join(" · ");
+  return `${title}\n${meta}`;
+}
+
+// HTML message: each story as a title + metadata block (best matches first,
+// capped), blocks separated by a blank line, then a link back to the app. Web
+// previews are disabled by the client.
 export function formatDigestMessage(stories: Story[], appUrl: string): string {
   const footer = `\n\n<a href="${appUrl}">Open the app</a>`;
   if (stories.length === 0) {
     return `No stories matched your interests today.${footer}`;
   }
   const shown = stories.slice(0, MAX_STORIES);
-  const lines = shown.map(
-    (s) => `• <a href="${storyLink(s)}">${escapeHtml(s.title)}</a>`,
-  );
+  const blocks = shown.map(formatStory);
   const extra = stories.length - shown.length;
-  const tail = extra > 0 ? `\n…and ${extra} more` : "";
-  return `🗞 ${stories.length} stories for you\n\n${lines.join("\n")}${tail}${footer}`;
+  const tail = extra > 0 ? `\n\n…and ${extra} more` : "";
+  return `🗞 ${stories.length} stories for you\n\n${blocks.join("\n\n")}${tail}${footer}`;
 }

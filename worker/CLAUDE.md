@@ -43,7 +43,9 @@ no `ENVIRONMENT`/`isTest` checks leak into logic, and there is no test-only rout
   the bot derives its `HELP`/`/help` reply from it, and the deploy workflow
   `setMyCommands`-registers the same file for client autocomplete. Telegram
   rejects hyphens in registered command names, so they use underscores.
-- Slot times are minute-of-day rounded to 5 (`parseDailyTime`).
+- Slot times are minute-of-day rounded to 5 (`parseDailyTime`). They are set
+  either from the bot (`/daily_time*`) or the web UI (`PUT /api/telegram/slots`,
+  body `telegramSlotsUpdateSchema`, 409 until linked → `saveSlots`).
 
 ## Data model & invariants
 
