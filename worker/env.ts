@@ -6,17 +6,23 @@ import type { Deps } from "./lib/deps";
 // unrecognized value as non-production (fakes), and the auth middleware treats
 // it as production (fail closed), so the type must not pretend the value is
 // always one of the configured literals.
-// TELEGRAM_BOT_TOKEN + TELEGRAM_WEBHOOK_SECRET are secrets (not in wrangler
-// vars), so cf-typegen does not surface them — declare them optional here. Only
-// production sets them; their absence is what flips createDeps to the fake
-// Telegram client and fails the webhook closed.
+// TELEGRAM_BOT_TOKEN is a secret (not in wrangler vars), so cf-typegen does not
+// surface it — declare it optional here. Only production sets it; its absence is
+// what flips createDeps to the fake Telegram client.
+// TELEGRAM_WEBHOOK_SECRET is a secret in production but a fixed committed var in
+// the e2e env (so the hermetic suite can drive the webhook); cf-typegen would
+// otherwise narrow it to the e2e literal, so it is widened to string here. Its
+// absence fails the webhook closed.
 // TELEGRAM_BOT_USERNAME is widened to string for the same reason as ENVIRONMENT:
 // the committed var is "" but production carries a real username, so the type
 // must not pretend it is always the empty-string literal.
 // GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET are production-only secrets (the Worker
 // runs the Google OAuth flow). Optional here for the same reason as the Telegram
 // secrets: local/e2e use the fake OAuth seam, so their absence is expected there.
-export type Bindings = Omit<Env, "ENVIRONMENT" | "TELEGRAM_BOT_USERNAME"> & {
+export type Bindings = Omit<
+  Env,
+  "ENVIRONMENT" | "TELEGRAM_BOT_USERNAME" | "TELEGRAM_WEBHOOK_SECRET"
+> & {
   ENVIRONMENT: string;
   TELEGRAM_BOT_USERNAME: string;
   TELEGRAM_BOT_TOKEN?: string;

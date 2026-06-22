@@ -209,6 +209,25 @@ describe("handleTelegramUpdate", () => {
     ]);
   });
 
+  it("disconnects a linked chat via /disconnect and returns to unlinked", async () => {
+    const db = getDb(env);
+    const { code } = await mintLinkCode(db, USER, new Date());
+    await handleTelegramUpdate(db, message(`/start ${code}`));
+    await saveSlots(db, USER, ["08:00", null, null]);
+    expect((await loadTelegramStatus(db, USER)).linked).toBe(true);
+
+    const res = await handleTelegramUpdate(db, message("/disconnect"));
+    expect(res?.reply).toContain("Disconnected");
+
+    const status = await loadTelegramStatus(db, USER);
+    expect(status.linked).toBe(false);
+    expect(status.slots).toEqual([null, null, null]);
+
+    // Once unlinked, the chat is treated as a stranger again.
+    const after = await handleTelegramUpdate(db, message("/disconnect"));
+    expect(after?.reply).toContain("not linked");
+  });
+
   it("ignores non-command and non-message updates", async () => {
     const db = getDb(env);
     expect(await handleTelegramUpdate(db, message("hello"))).toBeNull();

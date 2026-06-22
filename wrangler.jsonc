@@ -42,6 +42,11 @@
         "ENVIRONMENT": "e2e",
         "APP_URL": "http://localhost:5174",
         "TELEGRAM_BOT_USERNAME": "",
+        // A fixed, non-secret value so the hermetic e2e suite can drive the bot
+        // webhook (link/disconnect a chat). Production sets the real secret via
+        // `wrangler secret put`; the Telegram client stays the no-op fake here
+        // (no TELEGRAM_BOT_TOKEN), so no message ever leaves the worker.
+        "TELEGRAM_WEBHOOK_SECRET": "e2e-webhook-secret",
       },
       "d1_databases": [
         {

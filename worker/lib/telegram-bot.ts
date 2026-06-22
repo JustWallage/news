@@ -144,6 +144,15 @@ export async function loadChatId(
   return (await loadByEmail(db, userEmail))?.chatId ?? null;
 }
 
+// Drop the chat link entirely (chat binding, pending code, and slots) so the
+// account is back to unlinked. Idempotent: a no-op when nothing is linked.
+export async function disconnectTelegram(
+  db: Db,
+  userEmail: string,
+): Promise<void> {
+  await db.delete(telegram).where(eq(telegram.userEmail, userEmail));
+}
+
 export async function mintLinkCode(
   db: Db,
   userEmail: string,
@@ -316,6 +325,14 @@ export async function handleTelegramUpdate(
       return { chatId, reply: await setSlot(db, row, 1, arg) };
     case "/daily_time_3":
       return { chatId, reply: await setSlot(db, row, 2, arg) };
+    case "/disconnect":
+      await disconnectTelegram(db, row.userEmail);
+      return {
+        chatId,
+        reply:
+          "✅ Disconnected. This chat will no longer receive summaries. " +
+          "Reconnect any time from the app's preferences page.",
+      };
     case "/help":
       return { chatId, reply: HELP };
     default:
