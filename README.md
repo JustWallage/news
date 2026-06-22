@@ -14,10 +14,10 @@ configured slot.
 ## Stack
 
 Vite + React 19 SPA and a Hono API served by one Cloudflare Worker; in-app Google
-OAuth sign-in (`arctic`) with D1-backed sessions — no Cloudflare Access; D1
-(Drizzle) for storage; Workers AI for filtering; Zod contracts in `shared/`;
-Terraform for infra (prod D1, custom domain); Playwright e2e; a single
-`pnpm check` gate enforced as the pre-commit hook.
+OAuth sign-in (`arctic`) with D1-backed sessions; D1 (Drizzle) for storage;
+Workers AI for filtering; Zod contracts in `shared/`; Terraform for infra (prod
+D1, custom domain); Playwright e2e; a single `pnpm check` gate enforced as the
+pre-commit hook.
 
 ## Develop
 
