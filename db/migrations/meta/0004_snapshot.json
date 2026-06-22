@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "0f8ee8fb-fe4b-4e99-a53b-786f1824504a",
-  "prevId": "07e8f916-be1b-4f67-acfb-26599e9fb040",
+  "id": "6c4b3aba-8696-4463-bbfa-b4f29978727b",
+  "prevId": "0f8ee8fb-fe4b-4e99-a53b-786f1824504a",
   "tables": {
     "curations": {
       "name": "curations",
@@ -299,6 +299,13 @@
         "slot3": {
           "name": "slot3",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "timezone": {
+          "name": "timezone",
+          "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

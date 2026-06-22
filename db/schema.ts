@@ -75,6 +75,15 @@ export const telegram = sqliteTable(
   (t) => [uniqueIndex("telegram_chat_id_idx").on(t.chatId)],
 );
 
+// One row per active login session. The cookie carries an opaque random token;
+// the row id is that token's SHA-256 hex, so a DB read alone never yields a
+// usable cookie. Expired rows are simply ignored at lookup time.
+export const sessions = sqliteTable("sessions", {
+  id: text("id").primaryKey(),
+  userEmail: text("user_email").notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+});
+
 export type StoryRow = typeof stories.$inferSelect;
 export type CurationRow = typeof curations.$inferSelect;
 export type PreferenceRow = typeof preferences.$inferSelect;

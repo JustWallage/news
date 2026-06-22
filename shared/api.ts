@@ -80,6 +80,16 @@ export const telegramTimezoneSchema = z.object({
   timezone: z.string().refine(isValidTimeZone, "invalid IANA time zone"),
 });
 
+// One daily-summary time as "HH:MM" (24h), or null to leave that slot unset.
+const telegramSlotSchema = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+  .nullable();
+
+export const telegramSlotsUpdateSchema = z.object({
+  slots: z.array(telegramSlotSchema).length(3),
+});
+
 export const telegramLinkCodeSchema = z.object({
   /** One-time code to send the bot as `/start <code>`. */
   code: z.string(),

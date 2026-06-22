@@ -1,6 +1,10 @@
 import { expect, test } from "./fixtures";
 
-test("an empty feed shows guidance", async ({ page }) => {
+test("an empty feed shows guidance", async ({ page, request }) => {
+  // Auto-refresh runs the digest on visit; with prefs that match no front-page
+  // story the feed stays empty, so the onboarding guidance still shows.
+  await request.put("/api/preferences", { data: { text: "kubernetes" } });
+
   await page.goto("/");
   await expect(page.getByText(/No stories yet/)).toBeVisible();
 });
@@ -19,6 +23,47 @@ test("the Refresh button curates the feed from preferences", async ({
     page.getByRole("link", { name: /Rust's new borrow checker/ }),
   ).toBeVisible();
   await expect(page.getByText(/Bitcoin hits a new all-time high/)).toBeHidden();
+});
+
+test("visiting the homepage auto-refreshes the feed without clicking Refresh", async ({
+  page,
+  request,
+}) => {
+  await request.put("/api/preferences", { data: { text: "rust" } });
+
+  await page.goto("/");
+  await expect(
+    page.getByRole("link", { name: /Rust's new borrow checker/ }),
+  ).toBeVisible();
+  await expect(page.getByText(/Bitcoin hits a new all-time high/)).toBeHidden();
+});
+
+test("shows a refreshing indicator above the feed while curating", async ({
+  page,
+  request,
+}) => {
+  // Seed a feed so the indicator renders above existing stories.
+  await request.put("/api/preferences", { data: { text: "rust" } });
+  await request.post("/api/digest/run");
+
+  // Hold the on-visit digest run open so the in-flight state is observable.
+  let release = (): void => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/digest/run", async (route) => {
+    await gate;
+    await route.continue();
+  });
+
+  await page.goto("/");
+  await expect(page.getByText("Refreshing your stories…")).toBeVisible();
+
+  release();
+  await expect(page.getByText("Refreshing your stories…")).toBeHidden();
+  await expect(
+    page.getByRole("link", { name: /Rust's new borrow checker/ }),
+  ).toBeVisible();
 });
 
 test("curated stories render HN-style with working links", async ({

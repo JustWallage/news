@@ -2,15 +2,14 @@ import { Hono } from "hono";
 import { meSchema } from "../shared/api";
 import type { AppEnv } from "./env";
 import { createDeps } from "./lib/deps";
-import { runScheduledDigest, runTelegramDigests } from "./lib/scheduled";
+import { runTelegramDigests } from "./lib/scheduled";
 import { authMiddleware } from "./middleware/auth";
+import { authRoutes } from "./routes/auth";
 import { digestRoutes } from "./routes/digest";
 import { preferencesRoutes } from "./routes/preferences";
 import { storiesRoutes } from "./routes/stories";
 import { telegramRoutes } from "./routes/telegram";
 import { telegramWebhookRoutes } from "./routes/telegram-webhook";
-
-const TELEGRAM_CRON = "*/5 * * * *";
 
 export const app = new Hono<AppEnv>();
 
@@ -31,18 +30,18 @@ app.route("/api/preferences", preferencesRoutes);
 app.route("/api/digest", digestRoutes);
 app.route("/api/telegram", telegramRoutes);
 
-// The Telegram webhook is intentionally NOT under /api: Telegram cannot present
-// a CF Access identity, so it sits outside the auth + deps middleware and is
-// guarded by its own secret-token check (see the route).
+// The Google sign-in flow is intentionally NOT under /api: it must be reachable
+// without a session (that is what it creates), so it sits outside the auth
+// middleware. Same for the Telegram webhook below.
+app.route("/auth", authRoutes);
+
+// The Telegram webhook cannot present a session, so it sits outside the auth +
+// deps middleware and is guarded by its own secret-token check (see the route).
 app.route("/telegram", telegramWebhookRoutes);
 
 export default {
   fetch: app.fetch,
   scheduled: (controller, env, ctx) => {
-    const run =
-      controller.cron === TELEGRAM_CRON
-        ? runTelegramDigests(env, new Date(controller.scheduledTime))
-        : runScheduledDigest(env);
-    ctx.waitUntil(run);
+    ctx.waitUntil(runTelegramDigests(env, new Date(controller.scheduledTime)));
   },
 } satisfies ExportedHandler<Env>;

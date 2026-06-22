@@ -201,6 +201,56 @@ describe("api", () => {
     expect(status.chatLabel).toBe("@just");
   });
 
+  it("sets daily-summary slots only once a chat is linked", async () => {
+    const notLinked = await app.request(
+      "/api/telegram/slots",
+      json("PUT", { slots: ["08:00", null, null] }),
+      env,
+    );
+    expect(notLinked.status).toBe(409);
+
+    const minted = await (
+      await app.request(
+        "/api/telegram/link-code",
+        json("POST", { timezone: "America/New_York" }),
+        env,
+      )
+    ).json<{ code: string }>();
+    await app.request(
+      "/telegram/webhook",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Telegram-Bot-Api-Secret-Token": "unit-webhook-secret",
+        },
+        body: JSON.stringify({
+          message: { chat: { id: 555 }, text: `/start ${minted.code}` },
+        }),
+      },
+      env,
+    );
+
+    const bad = await app.request(
+      "/api/telegram/slots",
+      json("PUT", { slots: ["nope", null, null] }),
+      env,
+    );
+    expect(bad.status).toBe(400);
+
+    const ok = await app.request(
+      "/api/telegram/slots",
+      json("PUT", { slots: ["08:32", null, "20:00"] }),
+      env,
+    );
+    expect(ok.status).toBe(200);
+
+    const status = await (
+      await app.request("/api/telegram", get, env)
+    ).json<{ slots: (string | null)[] }>();
+    expect(status.slots).toEqual(["08:30", null, "20:00"]);
+  });
+
   it("rejects a test message until a chat is linked", async () => {
     const notLinked = await app.request(
       "/api/telegram/test",
@@ -234,6 +284,52 @@ describe("api", () => {
 
     const sent = await app.request("/api/telegram/test", json("POST", {}), env);
     expect(sent.status).toBe(200);
+  });
+
+  it("disconnects a linked chat via DELETE /api/telegram", async () => {
+    const minted = await (
+      await app.request(
+        "/api/telegram/link-code",
+        json("POST", { timezone: "America/New_York" }),
+        env,
+      )
+    ).json<{ code: string }>();
+    await app.request(
+      "/telegram/webhook",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Telegram-Bot-Api-Secret-Token": "unit-webhook-secret",
+        },
+        body: JSON.stringify({
+          message: { chat: { id: 909 }, text: `/start ${minted.code}` },
+        }),
+      },
+      env,
+    );
+    expect(
+      (
+        await (
+          await app.request("/api/telegram", get, env)
+        ).json<{
+          linked: boolean;
+        }>()
+      ).linked,
+    ).toBe(true);
+
+    const del = await app.request(
+      "/api/telegram",
+      { method: "DELETE", headers: authHeaders },
+      env,
+    );
+    expect(del.status).toBe(200);
+
+    const after = await (
+      await app.request("/api/telegram", get, env)
+    ).json<{ linked: boolean; slots: (string | null)[] }>();
+    expect(after.linked).toBe(false);
+    expect(after.slots).toEqual([null, null, null]);
   });
 
   it("re-curates against new preferences after an edit", async () => {

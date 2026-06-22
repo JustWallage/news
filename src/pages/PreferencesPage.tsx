@@ -7,13 +7,22 @@ import {
 } from "@shared/api";
 import { useEffect, useRef, useState } from "react";
 import { useUser } from "@/components/AuthGate";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCachedFetch } from "@/hooks/useCachedFetch";
 import { apiFetch, jsonInit } from "@/lib/api";
 
 const TIMEZONES = Intl.supportedValuesOf("timeZone");
+
+async function logout(): Promise<void> {
+  await apiFetch("/auth/logout", okSchema, jsonInit("POST", {}));
+  window.location.href = "/";
+}
+
+const SLOT_LABELS = ["First", "Second", "Third"];
 
 function TelegramSection() {
   const { data, mutate } = useCachedFetch(
@@ -29,13 +38,26 @@ function TelegramSection() {
   const [timezone, setTimezone] = useState(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone,
   );
+  const [slots, setSlots] = useState<string[]>(["", "", ""]);
+  const [slotStatus, setSlotStatus] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   // Seed from the server only while untouched, so a background revalidate can
   // never clobber an in-flight choice (same guard as the interests textarea).
   const tzDirty = useRef(false);
+  const slotsDirty = useRef(false);
 
   useEffect(() => {
     if (data?.timezone != null && !tzDirty.current) {
       setTimezone(data.timezone);
+    }
+  }, [data]);
+
+  useEffect(() => {
+    if (data !== undefined && !slotsDirty.current) {
+      setSlots(data.slots.map((slot) => slot ?? ""));
     }
   }, [data]);
 
@@ -52,6 +74,38 @@ function TelegramSection() {
       })
       .catch(() => {
         // Leave the selector on the chosen value; a later save can retry.
+      });
+  };
+
+  const saveSlots = (): void => {
+    setSlotStatus("saving");
+    const payload = { slots: slots.map((slot) => (slot === "" ? null : slot)) };
+    apiFetch("/api/telegram/slots", okSchema, jsonInit("PUT", payload))
+      .then(() => {
+        setSlotStatus("saved");
+        slotsDirty.current = false;
+        mutate();
+      })
+      .catch(() => {
+        setSlotStatus("error");
+      });
+  };
+
+  const disconnect = (): void => {
+    setDisconnecting(true);
+    apiFetch("/api/telegram", okSchema, { method: "DELETE" })
+      .then(() => {
+        setCode(null);
+        setSlots(["", "", ""]);
+        slotsDirty.current = false;
+        setTest("idle");
+        mutate();
+      })
+      .catch(() => {
+        // Disconnect failed — the chat stays linked; the user can retry.
+      })
+      .finally(() => {
+        setDisconnecting(false);
       });
   };
 
@@ -104,12 +158,7 @@ function TelegramSection() {
 
   const linked = data?.linked === true;
   const label = data?.chatLabel ?? null;
-  const slots = data?.slots.filter((s): s is string => s !== null) ?? [];
   const who = label === null ? "Connected." : `Connected as ${label}.`;
-  const when =
-    slots.length > 0
-      ? ` Daily summaries at ${slots.join(", ")}.`
-      : " Set summary times in the bot with /daily_time.";
 
   return (
     <div className="space-y-4 border-t pt-5">
@@ -120,7 +169,70 @@ function TelegramSection() {
         </p>
       </div>
 
-      {linked && <p className="text-sm text-muted-foreground">{who + when}</p>}
+      {linked && (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">{who}</p>
+          <div className="space-y-2">
+            <Label>Daily summary times</Label>
+            <p className="text-sm text-muted-foreground">
+              Up to three times a day (Europe/Amsterdam). Leave a slot empty to
+              skip it.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {slots.map((value, i) => (
+                <Input
+                  key={SLOT_LABELS[i]}
+                  type="time"
+                  step={300}
+                  value={value}
+                  aria-label={`${SLOT_LABELS[i]} daily summary time`}
+                  className="w-32"
+                  onChange={(event) => {
+                    slotsDirty.current = true;
+                    setSlots(
+                      slots.map((slot, j) =>
+                        j === i ? event.target.value : slot,
+                      ),
+                    );
+                    setSlotStatus("idle");
+                  }}
+                />
+              ))}
+            </div>
+            <div className="flex items-center gap-3">
+              <Button onClick={saveSlots} disabled={slotStatus === "saving"}>
+                {slotStatus === "saving" ? "Saving…" : "Save times"}
+              </Button>
+              {slotStatus === "saved" && (
+                <span className="text-sm text-muted-foreground">Saved.</span>
+              )}
+              {slotStatus === "error" && (
+                <span className="text-sm text-destructive">
+                  Could not save.
+                </span>
+              )}
+            </div>
+          </div>
+          <Button
+            variant="destructive"
+            onClick={() => {
+              setConfirmDisconnect(true);
+            }}
+            disabled={disconnecting}
+          >
+            {disconnecting ? "Disconnecting…" : "Disconnect"}
+          </Button>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={confirmDisconnect}
+        onOpenChange={setConfirmDisconnect}
+        title="Disconnect Telegram?"
+        description="This chat will stop receiving daily summaries and your saved times will be cleared. You can reconnect any time."
+        confirmLabel="Yes, disconnect"
+        onConfirm={disconnect}
+      />
 
       <div className="space-y-1">
         <Label htmlFor="timezone">Timezone</Label>
@@ -239,12 +351,15 @@ export function PreferencesPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <span className="text-sm text-muted-foreground">{email}</span>
-        <a
-          href="/cdn-cgi/access/logout"
-          className={buttonVariants({ variant: "outline", size: "sm" })}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            void logout();
+          }}
         >
           Log out
-        </a>
+        </Button>
       </div>
 
       <div className="space-y-2">

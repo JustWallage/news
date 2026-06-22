@@ -122,16 +122,15 @@ interface CandidateVerdict {
   curatedAt: Date;
 }
 
-export async function runDigest(
+// Resolve the front-page candidates ONCE: reuse the cached snapshot if the last
+// HN fetch is within the rate-limit window, otherwise fetch the whole front page
+// in one request and refresh the global content cache. The cron calls this a
+// single time per tick and shares the result across every due user.
+export async function fetchFrontPage(
   db: Db,
-  deps: { hn: HnClient; ai: AiFilter },
-  prefsText: string,
-  prefVersion: number,
-  userEmail: string,
+  hn: HnClient,
   now: Date,
-): Promise<DigestResult> {
-  const trimmedPrefs = prefsText.trim();
-
+): Promise<StoryInput[]> {
   // The globally last HN fetch is the most recent stories.fetchedAt; every row
   // from one fetch shares that timestamp, so the latest snapshot is exactly the
   // rows equal to it.
@@ -142,7 +141,6 @@ export async function runDigest(
     .limit(1);
   const lastFetch = latest?.fetchedAt ?? null;
 
-  let candidates: StoryInput[];
   if (
     lastFetch !== null &&
     now.getTime() - lastFetch.getTime() < RATE_LIMIT_MS
@@ -152,41 +150,58 @@ export async function runDigest(
       .select()
       .from(stories)
       .where(eq(stories.fetchedAt, lastFetch));
-    candidates = cached.map(toStoryInput);
+    const candidates = cached.map(toStoryInput);
     console.log(
       `[digest] rate-limited: reusing ${candidates.length} cached stories from ${lastFetch.toISOString()}`,
     );
-  } else {
-    // One request returns the whole front page with content.
-    candidates = await deps.hn.frontPage();
-    // Refresh the global content cache (chunked multi-row upserts; D1 100-param cap).
-    for (const part of chunk(candidates, STORY_CHUNK)) {
-      await db
-        .insert(stories)
-        .values(
-          part.map((s) => ({
-            id: s.id,
-            title: s.title,
-            url: s.url,
-            by: s.by,
-            score: s.score,
-            comments: s.comments,
-            time: new Date(s.time * 1000),
-            fetchedAt: now,
-          })),
-        )
-        .onConflictDoUpdate({
-          target: stories.id,
-          set: {
-            title: sql`excluded.title`,
-            url: sql`excluded.url`,
-            score: sql`excluded.score`,
-            comments: sql`excluded.comments`,
-            fetchedAt: sql`excluded.fetched_at`,
-          },
-        });
-    }
+    return candidates;
   }
+
+  // One request returns the whole front page with content.
+  const candidates = await hn.frontPage();
+  // Refresh the global content cache (chunked multi-row upserts; D1 100-param cap).
+  for (const part of chunk(candidates, STORY_CHUNK)) {
+    await db
+      .insert(stories)
+      .values(
+        part.map((s) => ({
+          id: s.id,
+          title: s.title,
+          url: s.url,
+          by: s.by,
+          score: s.score,
+          comments: s.comments,
+          time: new Date(s.time * 1000),
+          fetchedAt: now,
+        })),
+      )
+      .onConflictDoUpdate({
+        target: stories.id,
+        set: {
+          title: sql`excluded.title`,
+          url: sql`excluded.url`,
+          score: sql`excluded.score`,
+          comments: sql`excluded.comments`,
+          fetchedAt: sql`excluded.fetched_at`,
+        },
+      });
+  }
+  return candidates;
+}
+
+// Evaluate the given front-page candidates for one user and recompute their
+// feed. Pure per-user work: safe to run concurrently for many users sharing the
+// same candidates snapshot.
+export async function curateForUser(
+  db: Db,
+  ai: AiFilter,
+  candidates: StoryInput[],
+  prefsText: string,
+  prefVersion: number,
+  userEmail: string,
+  now: Date,
+): Promise<DigestResult> {
+  const trimmedPrefs = prefsText.trim();
 
   console.log(
     `[digest] user=${userEmail} candidates=${candidates.length} prefs=${
@@ -223,7 +238,7 @@ export async function runDigest(
       );
     const reusable = new Map(priorRows.map((r) => [r.storyId, r]));
     const toEvaluate = candidates.filter((c) => !reusable.has(c.id));
-    const verdicts = await deps.ai.select(trimmedPrefs, toEvaluate);
+    const verdicts = await ai.select(trimmedPrefs, toEvaluate);
     const fresh = new Map(
       verdicts
         .filter((v) => toEvaluate.some((c) => c.id === v.id))
@@ -300,4 +315,26 @@ export async function runDigest(
       });
   }
   return { count: relevantCount };
+}
+
+// Single-user digest: fetch the front page, then curate it for the user. Used by
+// the homepage Refresh route and the Telegram /fetch command.
+export async function runDigest(
+  db: Db,
+  deps: { hn: HnClient; ai: AiFilter },
+  prefsText: string,
+  prefVersion: number,
+  userEmail: string,
+  now: Date,
+): Promise<DigestResult> {
+  const candidates = await fetchFrontPage(db, deps.hn, now);
+  return curateForUser(
+    db,
+    deps.ai,
+    candidates,
+    prefsText,
+    prefVersion,
+    userEmail,
+    now,
+  );
 }

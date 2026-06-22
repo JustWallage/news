@@ -1,34 +1,23 @@
-import { eq } from "drizzle-orm";
-import { telegram } from "../../db/schema";
+import { and, isNotNull, or } from "drizzle-orm";
+import { telegram, type TelegramRow } from "../../db/schema";
 import type { Bindings } from "../env";
 import type { Db } from "./db";
 import { getDb } from "./db";
 import { createDeps, type Deps } from "./deps";
-import { loadPreferences, runDigest } from "./digest";
+import {
+  curateForUser,
+  fetchFrontPage,
+  loadPreferences,
+  runDigest,
+} from "./digest";
 import { loadFeed } from "./feed";
 import { formatDigestMessage } from "./telegram";
 import { dueSlot } from "./telegram-bot";
-import { amsterdamHour, minuteOfDayInTz } from "./time";
-
-// The cron fires at two fixed UTC times (04:20 + 05:20) so that exactly one of
-// them is 06:xx Amsterdam time year-round; the other is skipped here. Runs the
-// digest for the owner (the first ALLOWED_EMAILS entry).
-export async function runScheduledDigest(env: Bindings): Promise<void> {
-  const now = new Date();
-  if (amsterdamHour(now) !== 6) {
-    return;
-  }
-  const owner = env.ALLOWED_EMAILS.split(",")[0]?.trim() ?? "";
-  if (owner === "") {
-    return;
-  }
-  const db = getDb(env);
-  const prefs = await loadPreferences(db, owner);
-  await runDigest(db, createDeps(env), prefs.text, prefs.version, owner, now);
-}
+import { minuteOfDayInTz } from "./time";
 
 // Re-run the digest for the user, then push the freshly curated feed to their
-// Telegram chat. Deps are injected so a recording client can assert the send.
+// Telegram chat. Used by the Telegram /fetch command (a single-user on-demand
+// run). Deps are injected so a recording client can assert the send.
 export async function sendDailyDigest(
   db: Db,
   deps: Deps,
@@ -43,37 +32,66 @@ export async function sendDailyDigest(
   await deps.telegram.sendMessage(chatId, formatDigestMessage(feed, appUrl));
 }
 
-// The */5 heartbeat: send a Telegram summary only when the current minute in the
-// owner's timezone (Europe/Amsterdam when unset) matches one of their configured
-// slots (so each slot fires once per day). Off-slot wakes are a single indexed
-// read and an early return.
+type LinkedRow = TelegramRow & { chatId: number };
+
+// The */5 heartbeat core. Sends a summary to every user whose configured slot
+// matches the current minute in their own timezone (Europe/Amsterdam when
+// unset) — so the due check is per-row in JS, not a single SQL minute filter.
+// HN is queried at most once per tick — only when ≥1 user is due — and the
+// shared front page is then evaluated and delivered to each due user in
+// parallel. Deps are injected for testing.
+export async function sendDueDigests(
+  db: Db,
+  deps: Deps,
+  appUrl: string,
+  now: Date,
+): Promise<void> {
+  const linked = await db
+    .select()
+    .from(telegram)
+    .where(
+      and(
+        isNotNull(telegram.chatId),
+        or(
+          isNotNull(telegram.slot1),
+          isNotNull(telegram.slot2),
+          isNotNull(telegram.slot3),
+        ),
+      ),
+    );
+  const due = linked.filter(
+    (row): row is LinkedRow =>
+      row.chatId !== null &&
+      dueSlot(row, minuteOfDayInTz(now, row.timezone ?? "Europe/Amsterdam")),
+  );
+  if (due.length === 0) {
+    return;
+  }
+  const candidates = await fetchFrontPage(db, deps.hn, now);
+  await Promise.all(
+    due.map(async (row) => {
+      const prefs = await loadPreferences(db, row.userEmail);
+      await curateForUser(
+        db,
+        deps.ai,
+        candidates,
+        prefs.text,
+        prefs.version,
+        row.userEmail,
+        now,
+      );
+      const feed = await loadFeed(db, row.userEmail);
+      await deps.telegram.sendMessage(
+        row.chatId,
+        formatDigestMessage(feed, appUrl),
+      );
+    }),
+  );
+}
+
 export async function runTelegramDigests(
   env: Bindings,
   now: Date,
 ): Promise<void> {
-  const owner = env.ALLOWED_EMAILS.split(",")[0]?.trim() ?? "";
-  if (owner === "") {
-    return;
-  }
-  const db = getDb(env);
-  const rows = await db
-    .select()
-    .from(telegram)
-    .where(eq(telegram.userEmail, owner))
-    .limit(1);
-  const row = rows[0];
-  if (row?.chatId == null) {
-    return;
-  }
-  if (!dueSlot(row, minuteOfDayInTz(now, row.timezone ?? "Europe/Amsterdam"))) {
-    return;
-  }
-  await sendDailyDigest(
-    db,
-    createDeps(env),
-    owner,
-    row.chatId,
-    env.APP_URL,
-    now,
-  );
+  await sendDueDigests(getDb(env), createDeps(env), env.APP_URL, now);
 }
