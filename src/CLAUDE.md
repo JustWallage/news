@@ -7,7 +7,8 @@
 - HomePage has a **Refresh** button → `POST /api/digest/run` (re-curates the
   current user's feed on demand), then re-fetches the feed. HomePage also
   auto-fires `refresh()` once on mount (a `useRef` guard); the backend
-  rate-limits HN fetches to once / 5min so it's cheap.
+  rate-limits HN fetches to once / 5min so it's cheap. While `refreshing`
+  spinner above posts.
 - `AuthGate` shows a "Sign in with Google" screen (→ `/auth/login`) when
   `/api/health` 401s; PreferencesPage has a Log out button → `POST /auth/logout`.
 - Opening a story title fires a fire-and-forget `POST /api/stories/:id/open`
