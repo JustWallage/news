@@ -7,6 +7,7 @@ import {
 import type { AppEnv } from "../env";
 import { getDb } from "../lib/db";
 import {
+  disconnectTelegram,
   loadChatId,
   loadTelegramStatus,
   mintLinkCode,
@@ -28,6 +29,14 @@ telegramRoutes.get("/", async (c) => {
   const db = getDb(c.env);
   const status = await loadTelegramStatus(db, c.get("userEmail"));
   return c.json(telegramStatusSchema.parse(status));
+});
+
+// Unlink the connected chat (the "Disconnect" button). Idempotent — returns ok
+// even when no chat is linked.
+telegramRoutes.delete("/", async (c) => {
+  const db = getDb(c.env);
+  await disconnectTelegram(db, c.get("userEmail"));
+  return c.json({ ok: true });
 });
 
 // Mint a one-time code (15-min expiry) for the user to send the bot as

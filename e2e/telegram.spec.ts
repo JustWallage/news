@@ -1,4 +1,34 @@
+import type { APIRequestContext } from "@playwright/test";
+import { telegramLinkCodeSchema, telegramStatusSchema } from "@shared/api";
 import { expect, test } from "./fixtures";
+
+// The fixed e2e webhook secret (wrangler.jsonc e2e env). Lets the hermetic suite
+// drive the bot webhook to link/unlink a chat without a real Telegram round-trip.
+const WEBHOOK_SECRET = "e2e-webhook-secret";
+
+// Links a chat to the test user the way production does: mint a code, then send
+// the bot a `/start <code>` via the webhook. Returns the chat id (unique per
+// test, so parallel runs don't collide on the chat_id index) and `@handle`.
+async function linkChat(
+  request: APIRequestContext,
+): Promise<{ chatId: number; label: string }> {
+  const chatId = Math.floor(Math.random() * 1_000_000_000);
+  const username = `e2e_${chatId}`;
+  const minted = telegramLinkCodeSchema.parse(
+    await (await request.post("/api/telegram/link-code", { data: {} })).json(),
+  );
+  const linked = await request.post("/telegram/webhook", {
+    headers: { "X-Telegram-Bot-Api-Secret-Token": WEBHOOK_SECRET },
+    data: {
+      message: {
+        chat: { id: chatId, username },
+        text: `/start ${minted.code}`,
+      },
+    },
+  });
+  expect(linked.status()).toBe(200);
+  return { chatId, label: `@${username}` };
+}
 
 test("the preferences page reveals a Telegram connect code with a copy button", async ({
   page,
@@ -18,4 +48,45 @@ test("the preferences page reveals a Telegram connect code with a copy button", 
   await expect(copy).toBeVisible();
   await copy.click();
   await expect(page.getByRole("button", { name: "Copied" })).toBeVisible();
+});
+
+test("disconnects Telegram from the preferences page after confirming", async ({
+  page,
+  request,
+}) => {
+  const { label } = await linkChat(request);
+
+  await page.goto("/preferences");
+  await expect(page.getByText(`Connected as ${label}.`)).toBeVisible();
+  await expect(page.getByText("Daily summary times")).toBeVisible();
+
+  await page.getByRole("button", { name: "Disconnect", exact: true }).click();
+  await expect(page.getByText("Disconnect Telegram?")).toBeVisible();
+  await page.getByRole("button", { name: "Yes, disconnect" }).click();
+
+  await expect(page.getByText(/Connected as/)).toBeHidden();
+  await expect(page.getByText("Daily summary times")).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: "Disconnect", exact: true }),
+  ).toBeHidden();
+});
+
+test("the /disconnect bot command unlinks the chat", async ({ request }) => {
+  const { chatId } = await linkChat(request);
+
+  const before = telegramStatusSchema.parse(
+    await (await request.get("/api/telegram")).json(),
+  );
+  expect(before.linked).toBe(true);
+
+  const res = await request.post("/telegram/webhook", {
+    headers: { "X-Telegram-Bot-Api-Secret-Token": WEBHOOK_SECRET },
+    data: { message: { chat: { id: chatId }, text: "/disconnect" } },
+  });
+  expect(res.status()).toBe(200);
+
+  const after = telegramStatusSchema.parse(
+    await (await request.get("/api/telegram")).json(),
+  );
+  expect(after.linked).toBe(false);
 });

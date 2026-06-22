@@ -7,6 +7,7 @@ import {
 } from "@shared/api";
 import { useEffect, useRef, useState } from "react";
 import { useUser } from "@/components/AuthGate";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,6 +32,8 @@ function TelegramSection() {
   const [slotStatus, setSlotStatus] = useState<
     "idle" | "saving" | "saved" | "error"
   >("idle");
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   // Seed the time fields from the server only while they are still pristine, so
   // a background revalidate can't clobber what the user is editing.
   const slotsDirty = useRef(false);
@@ -52,6 +55,24 @@ function TelegramSection() {
       })
       .catch(() => {
         setSlotStatus("error");
+      });
+  };
+
+  const disconnect = (): void => {
+    setDisconnecting(true);
+    apiFetch("/api/telegram", okSchema, { method: "DELETE" })
+      .then(() => {
+        setCode(null);
+        setSlots(["", "", ""]);
+        slotsDirty.current = false;
+        setTest("idle");
+        mutate();
+      })
+      .catch(() => {
+        // Disconnect failed — the chat stays linked; the user can retry.
+      })
+      .finally(() => {
+        setDisconnecting(false);
       });
   };
 
@@ -159,8 +180,26 @@ function TelegramSection() {
               )}
             </div>
           </div>
+          <Button
+            variant="destructive"
+            onClick={() => {
+              setConfirmDisconnect(true);
+            }}
+            disabled={disconnecting}
+          >
+            {disconnecting ? "Disconnecting…" : "Disconnect"}
+          </Button>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmDisconnect}
+        onOpenChange={setConfirmDisconnect}
+        title="Disconnect Telegram?"
+        description="This chat will stop receiving daily summaries and your saved times will be cleared. You can reconnect any time."
+        confirmLabel="Yes, disconnect"
+        onConfirm={disconnect}
+      />
 
       <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
         <li>Generate your start command below.</li>

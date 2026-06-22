@@ -237,6 +237,48 @@ describe("api", () => {
     expect(sent.status).toBe(200);
   });
 
+  it("disconnects a linked chat via DELETE /api/telegram", async () => {
+    const minted = await (
+      await app.request("/api/telegram/link-code", json("POST", {}), env)
+    ).json<{ code: string }>();
+    await app.request(
+      "/telegram/webhook",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Telegram-Bot-Api-Secret-Token": "unit-webhook-secret",
+        },
+        body: JSON.stringify({
+          message: { chat: { id: 909 }, text: `/start ${minted.code}` },
+        }),
+      },
+      env,
+    );
+    expect(
+      (
+        await (
+          await app.request("/api/telegram", get, env)
+        ).json<{
+          linked: boolean;
+        }>()
+      ).linked,
+    ).toBe(true);
+
+    const del = await app.request(
+      "/api/telegram",
+      { method: "DELETE", headers: authHeaders },
+      env,
+    );
+    expect(del.status).toBe(200);
+
+    const after = await (
+      await app.request("/api/telegram", get, env)
+    ).json<{ linked: boolean; slots: (string | null)[] }>();
+    expect(after.linked).toBe(false);
+    expect(after.slots).toEqual([null, null, null]);
+  });
+
   it("re-curates against new preferences after an edit", async () => {
     interface Feed {
       stories: { title: string }[];

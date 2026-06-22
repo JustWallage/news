@@ -25,6 +25,10 @@
       "command": "daily_time_3",
       "description": "Set a third daily summary time"
     },
+    {
+      "command": "disconnect",
+      "description": "Disconnect this chat from your account"
+    },
     { "command": "help", "description": "Show available commands" }
   ]
 }
