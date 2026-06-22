@@ -125,7 +125,7 @@ function TelegramSection() {
       <div className="space-y-1">
         <Label htmlFor="timezone">Timezone</Label>
         <p className="text-sm text-muted-foreground">
-          Your daily summaries are sent at the times above in this timezone.
+          Your daily summaries are scheduled in this timezone.
         </p>
         <select
           id="timezone"
