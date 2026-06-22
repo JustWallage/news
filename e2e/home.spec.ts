@@ -1,6 +1,10 @@
 import { expect, test } from "./fixtures";
 
-test("an empty feed shows guidance", async ({ page }) => {
+test("an empty feed shows guidance", async ({ page, request }) => {
+  // Auto-refresh runs the digest on visit; with prefs that match no front-page
+  // story the feed stays empty, so the onboarding guidance still shows.
+  await request.put("/api/preferences", { data: { text: "kubernetes" } });
+
   await page.goto("/");
   await expect(page.getByText(/No stories yet/)).toBeVisible();
 });
@@ -15,6 +19,19 @@ test("the Refresh button curates the feed from preferences", async ({
 
   await page.goto("/");
   await page.getByRole("button", { name: "Refresh" }).click();
+  await expect(
+    page.getByRole("link", { name: /Rust's new borrow checker/ }),
+  ).toBeVisible();
+  await expect(page.getByText(/Bitcoin hits a new all-time high/)).toBeHidden();
+});
+
+test("visiting the homepage auto-refreshes the feed without clicking Refresh", async ({
+  page,
+  request,
+}) => {
+  await request.put("/api/preferences", { data: { text: "rust" } });
+
+  await page.goto("/");
   await expect(
     page.getByRole("link", { name: /Rust's new borrow checker/ }),
   ).toBeVisible();
