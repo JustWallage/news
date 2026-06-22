@@ -12,14 +12,11 @@ test("saves and reloads the preferences text", async ({ page }) => {
   );
 });
 
-test("shows the signed-in user and a logout link", async ({
+test("shows the signed-in user and a logout button", async ({
   page,
   userEmail,
 }) => {
   await page.goto("/preferences");
   await expect(page.getByText(userEmail)).toBeVisible();
-  await expect(page.getByRole("link", { name: "Log out" })).toHaveAttribute(
-    "href",
-    "/cdn-cgi/access/logout",
-  );
+  await expect(page.getByRole("button", { name: "Log out" })).toBeVisible();
 });

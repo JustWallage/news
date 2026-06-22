@@ -5,9 +5,9 @@
   "compatibility_date": "2026-06-01",
   "assets": {
     "not_found_handling": "single-page-application",
-    // /telegram/* is the bot webhook (outside /api, no CF Access); it must hit
-    // the worker rather than fall through to the SPA assets.
-    "run_worker_first": ["/api/*", "/telegram/*"],
+    // /telegram/* (bot webhook) and /auth/* (Google sign-in) live outside /api
+    // and must hit the worker rather than fall through to the SPA assets.
+    "run_worker_first": ["/api/*", "/telegram/*", "/auth/*"],
   },
   "observability": {
     "enabled": true,
@@ -19,9 +19,9 @@
   "ai": { "binding": "AI" },
   "vars": {
     "ENVIRONMENT": "local",
-    "ALLOWED_EMAILS": "just@wallage.nl",
-    // APP_URL is linked at the bottom of Telegram summaries; TELEGRAM_BOT_USERNAME
-    // builds the t.me deep link (empty → the link-code endpoint returns url: null).
+    // APP_URL is the OAuth redirect base + the Telegram summary footer link;
+    // TELEGRAM_BOT_USERNAME builds the t.me deep link (empty → the link-code
+    // endpoint returns url: null).
     "APP_URL": "http://localhost:5173",
     "TELEGRAM_BOT_USERNAME": "",
   },
@@ -40,7 +40,6 @@
     "e2e": {
       "vars": {
         "ENVIRONMENT": "e2e",
-        "ALLOWED_EMAILS": "just@wallage.nl",
         "APP_URL": "http://localhost:5174",
         "TELEGRAM_BOT_USERNAME": "",
       },
@@ -54,8 +53,6 @@
       ],
     },
     // Production: D1 id placeholder substituted by CI from terraform output.
-    // The cron fires at 04:20 and 05:20 UTC; the handler keeps only the one
-    // that is 06:xx Europe/Amsterdam (DST-safe).
     "production": {
       "name": "news",
       "ai": {
@@ -63,18 +60,14 @@
       },
       // The custom domain is created here (by wrangler at deploy time, when the
       // worker exists) rather than in Terraform, which runs before the worker.
-      // Terraform still owns the Cloudflare Access app that guards this hostname.
       "routes": [{ "pattern": "news.justwallage.nl", "custom_domain": true }],
-      // The 04:20/05:20 fires drive the guaranteed daily website digest (handler
-      // keeps the 06:xx Europe/Amsterdam one, DST-safe). The */5 heartbeat drives
-      // the Telegram daily summaries — it only acts when the Amsterdam minute
-      // matches a configured slot.
+      // The */5 heartbeat drives the Telegram daily summaries — each tick acts
+      // only for the users whose configured Amsterdam-time slot matches.
       "triggers": {
-        "crons": ["20 4 * * *", "20 5 * * *", "*/5 * * * *"],
+        "crons": ["*/5 * * * *"],
       },
       "vars": {
         "ENVIRONMENT": "production",
-        "ALLOWED_EMAILS": "just@wallage.nl",
         "APP_URL": "https://news.justwallage.nl",
         "TELEGRAM_BOT_USERNAME": "JustlyNewsBot",
       },

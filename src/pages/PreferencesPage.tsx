@@ -14,6 +14,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { useCachedFetch } from "@/hooks/useCachedFetch";
 import { apiFetch, jsonInit } from "@/lib/api";
 
+async function logout(): Promise<void> {
+  await apiFetch("/auth/logout", okSchema, jsonInit("POST", {}));
+  window.location.href = "/";
+}
+
 const SLOT_LABELS = ["First", "Second", "Third"];
 
 function TelegramSection() {
@@ -258,12 +263,15 @@ export function PreferencesPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <span className="text-sm text-muted-foreground">{email}</span>
-        <a
-          href="/cdn-cgi/access/logout"
-          className={buttonVariants({ variant: "outline", size: "sm" })}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            void logout();
+          }}
         >
           Log out
-        </a>
+        </Button>
       </div>
 
       <div className="space-y-2">

@@ -15,7 +15,6 @@ REQUIRED_KEYS=(
   GOOGLE_CLIENT_SECRET
   TEST_AUTH_TOKEN
   WORKERS_DEV_SUBDOMAIN
-  CUSTOM_DOMAIN_ZONE_ID
 )
 
 # Pushed only when present — the Telegram bot is optional. deploy.yml puts these
