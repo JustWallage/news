@@ -24,10 +24,10 @@ export function amsterdamHour(now: Date): number {
   return Number(hour) % 24;
 }
 
-/** Minutes since midnight (0–1439) for the given instant in Amsterdam time. */
-export function amsterdamMinuteOfDay(now: Date): number {
+/** Minutes since midnight (0–1439) for the given instant in the given IANA zone. */
+export function minuteOfDayInTz(now: Date, timeZone: string): number {
   const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: TZ,
+    timeZone,
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,

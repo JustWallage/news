@@ -8,7 +8,7 @@ import { loadPreferences, runDigest } from "./digest";
 import { loadFeed } from "./feed";
 import { formatDigestMessage } from "./telegram";
 import { dueSlot } from "./telegram-bot";
-import { amsterdamHour, amsterdamMinuteOfDay } from "./time";
+import { amsterdamHour, minuteOfDayInTz } from "./time";
 
 // The cron fires at two fixed UTC times (04:20 + 05:20) so that exactly one of
 // them is 06:xx Amsterdam time year-round; the other is skipped here. Runs the
@@ -43,9 +43,10 @@ export async function sendDailyDigest(
   await deps.telegram.sendMessage(chatId, formatDigestMessage(feed, appUrl));
 }
 
-// The */5 heartbeat: send a Telegram summary only when the current Amsterdam
-// minute matches one of the owner's configured slots (so each slot fires once
-// per day). Off-slot wakes are a single indexed read and an early return.
+// The */5 heartbeat: send a Telegram summary only when the current minute in the
+// owner's timezone (Europe/Amsterdam when unset) matches one of their configured
+// slots (so each slot fires once per day). Off-slot wakes are a single indexed
+// read and an early return.
 export async function runTelegramDigests(
   env: Bindings,
   now: Date,
@@ -64,7 +65,7 @@ export async function runTelegramDigests(
   if (row?.chatId == null) {
     return;
   }
-  if (!dueSlot(row, amsterdamMinuteOfDay(now))) {
+  if (!dueSlot(row, minuteOfDayInTz(now, row.timezone ?? "Europe/Amsterdam"))) {
     return;
   }
   await sendDailyDigest(

@@ -43,7 +43,12 @@ no `ENVIRONMENT`/`isTest` checks leak into logic, and there is no test-only rout
   the bot derives its `HELP`/`/help` reply from it, and the deploy workflow
   `setMyCommands`-registers the same file for client autocomplete. Telegram
   rejects hyphens in registered command names, so they use underscores.
-- Slot times are minute-of-day rounded to 5 (`parseDailyTime`).
+- Slot times are minute-of-day rounded to 5 (`parseDailyTime`), interpreted in
+  the user's `telegram.timezone` (IANA; null → Europe/Amsterdam). The timezone is
+  captured from the browser on `POST /link-code` and editable via
+  `PUT /api/telegram/timezone` (`saveTimezone` upsert) — both validated by
+  `telegramTimezoneSchema`. `minuteOfDayInTz` (`lib/time.ts`) is the zone-aware
+  conversion; `amsterdamHour`/`amsterdamDate` stay Amsterdam-only for the web digest.
 
 ## Data model & invariants
 
@@ -86,10 +91,10 @@ no `ENVIRONMENT`/`isTest` checks leak into logic, and there is no test-only rout
 - `POST /api/digest/run` (homepage Refresh + cron + e2e) runs the digest for the
   current user via `c.var.deps` — no environment gate.
 - `index.ts` `scheduled` dispatches by `controller.cron`: `*/5 * * * *` →
-  `runTelegramDigests` (sends a summary only when the Amsterdam minute matches a
-  configured slot — each slot fires once/day; off-slot wakes early-return after
-  one indexed read); the fixed `20 4`/`20 5` fires → the unchanged 06:20
-  `runScheduledDigest` web digest.
+  `runTelegramDigests` (sends a summary only when the minute in the owner's
+  timezone matches a configured slot — each slot fires once/day; off-slot wakes
+  early-return after one indexed read); the fixed `20 4`/`20 5` fires → the
+  unchanged 06:20 `runScheduledDigest` web digest.
 - Responses are built through `shared/api.ts` schema `.parse(...)` in
   `lib/serialize.ts` (the no-casts pattern).
 

@@ -19,6 +19,9 @@
   connected chat label), POSTs `/api/telegram/link-code` to reveal a
   `/start <code>` connect code, and POSTs `/api/telegram/test` for the Send test
   message button; daily times themselves are set from the bot, not the web UI.
+  The timezone selector (native `<select>` from `Intl.supportedValuesOf`) saves
+  on change via `PUT /api/telegram/timezone`; the link-code POST also carries the
+  selected zone, so the browser-detected default and the editor never diverge.
 - `components/ui/` is shadcn-generated (Base UI primitives, NOT Radix — pass
   `render={<a />}` plus `nativeButton={false}` for a link-button, not `asChild`).
   It is exempt from lint and knip; regenerate via `pnpm dlx shadcn@latest add`.

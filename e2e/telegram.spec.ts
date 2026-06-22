@@ -17,3 +17,19 @@ test("the preferences page reveals a Telegram connect code with a copy button", 
   await copy.click();
   await expect(page.getByRole("button", { name: "Copied" })).toBeVisible();
 });
+
+test("the timezone selector persists the chosen zone", async ({ page }) => {
+  await page.goto("/preferences");
+  const select = page.getByLabel("Timezone");
+  await Promise.all([
+    page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/telegram/timezone") &&
+        r.request().method() === "PUT",
+    ),
+    select.selectOption("Asia/Tokyo"),
+  ]);
+
+  await page.reload();
+  await expect(page.getByLabel("Timezone")).toHaveValue("Asia/Tokyo");
+});

@@ -13,21 +13,54 @@ import { Textarea } from "@/components/ui/textarea";
 import { useCachedFetch } from "@/hooks/useCachedFetch";
 import { apiFetch, jsonInit } from "@/lib/api";
 
+const TIMEZONES = Intl.supportedValuesOf("timeZone");
+
 function TelegramSection() {
-  const { data } = useCachedFetch("/api/telegram", telegramStatusSchema);
+  const { data, mutate } = useCachedFetch(
+    "/api/telegram",
+    telegramStatusSchema,
+  );
   const [code, setCode] = useState<TelegramLinkCode | null>(null);
   const [pending, setPending] = useState(false);
   const [test, setTest] = useState<"idle" | "sending" | "sent" | "error">(
     "idle",
   );
   const [copied, setCopied] = useState(false);
+  const [timezone, setTimezone] = useState(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+  );
+  // Seed from the server only while untouched, so a background revalidate can
+  // never clobber an in-flight choice (same guard as the interests textarea).
+  const tzDirty = useRef(false);
+
+  useEffect(() => {
+    if (data?.timezone != null && !tzDirty.current) {
+      setTimezone(data.timezone);
+    }
+  }, [data]);
+
+  const changeTimezone = (next: string): void => {
+    tzDirty.current = true;
+    setTimezone(next);
+    apiFetch(
+      "/api/telegram/timezone",
+      okSchema,
+      jsonInit("PUT", { timezone: next }),
+    )
+      .then(() => {
+        mutate();
+      })
+      .catch(() => {
+        // Leave the selector on the chosen value; a later save can retry.
+      });
+  };
 
   const connect = (): void => {
     setPending(true);
     apiFetch(
       "/api/telegram/link-code",
       telegramLinkCodeSchema,
-      jsonInit("POST", {}),
+      jsonInit("POST", { timezone }),
     )
       .then((next) => {
         setCode(next);
@@ -88,6 +121,27 @@ function TelegramSection() {
       </div>
 
       {linked && <p className="text-sm text-muted-foreground">{who + when}</p>}
+
+      <div className="space-y-1">
+        <Label htmlFor="timezone">Timezone</Label>
+        <p className="text-sm text-muted-foreground">
+          Your daily summaries are sent at the times above in this timezone.
+        </p>
+        <select
+          id="timezone"
+          value={timezone}
+          onChange={(event) => {
+            changeTimezone(event.target.value);
+          }}
+          className="flex h-9 w-full max-w-xs rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        >
+          {TIMEZONES.map((tz) => (
+            <option key={tz} value={tz}>
+              {tz}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
         <li>Generate your start command below.</li>

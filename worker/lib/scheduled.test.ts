@@ -8,7 +8,7 @@ import { fakeAiFilter } from "./fakes";
 import type { HnClient } from "./hn";
 import { runTelegramDigests, sendDailyDigest } from "./scheduled";
 import type { TelegramClient } from "./telegram";
-import { amsterdamMinuteOfDay } from "./time";
+import { minuteOfDayInTz } from "./time";
 
 const USER = "just@wallage.nl";
 const CHAT = 4242;
@@ -89,10 +89,10 @@ describe("sendDailyDigest", () => {
 });
 
 describe("runTelegramDigests", () => {
-  const now = new Date("2026-06-17T06:05:00Z"); // 08:05 Amsterdam
-  const minute = amsterdamMinuteOfDay(now);
+  const now = new Date("2026-06-17T06:05:00Z"); // 08:05 Amsterdam, 02:05 New York
+  const minute = minuteOfDayInTz(now, "Europe/Amsterdam");
 
-  it("runs the digest only when a slot matches the current minute", async () => {
+  it("runs the digest only when a slot matches the current minute (null tz → Amsterdam)", async () => {
     const db = getDb(env);
     await db
       .insert(telegram)
@@ -104,6 +104,30 @@ describe("runTelegramDigests", () => {
     await db
       .update(telegram)
       .set({ slot1: minute })
+      .where(eq(telegram.userEmail, USER));
+    await runTelegramDigests(env, now);
+    expect((await db.select().from(stories)).length).toBeGreaterThan(0);
+  });
+
+  it("matches the slot in the user's timezone, not Amsterdam", async () => {
+    const db = getDb(env);
+    const nyMinute = minuteOfDayInTz(now, "America/New_York");
+    expect(nyMinute).not.toBe(minute);
+
+    // A slot at the Amsterdam minute must not fire for a New York user.
+    await db.insert(telegram).values({
+      userEmail: USER,
+      chatId: CHAT,
+      slot1: minute,
+      timezone: "America/New_York",
+    });
+    await runTelegramDigests(env, now);
+    expect(await db.select().from(stories)).toHaveLength(0);
+
+    // The same slot at the New York minute fires.
+    await db
+      .update(telegram)
+      .set({ slot1: nyMinute })
       .where(eq(telegram.userEmail, USER));
     await runTelegramDigests(env, now);
     expect((await db.select().from(stories)).length).toBeGreaterThan(0);
