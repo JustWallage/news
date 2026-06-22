@@ -1,20 +1,23 @@
 # news
 
-A personal, AI-curated Hacker News front page for one user, hosted at
-`news.justwallage.nl` on Cloudflare.
+A public, AI-curated Hacker News front page, hosted at `news.justwallage.nl` on
+Cloudflare. Sign in with Google and get your own feed.
 
-Every morning at 06:20 (Europe/Amsterdam) a cron pulls the Hacker News front
-page (the Algolia HN API — one request, full content), filters it through
-Workers AI (Llama 70B) against a plain-text preferences blob, and stores the
-matches in D1. The site renders them like the HN front page — title (link),
-points, age, comments — and tracks which links you've opened.
+The Worker pulls the Hacker News front page (the Algolia HN API — one request,
+full content) and filters it through Workers AI (Llama 70B) against your
+plain-text preferences blob, storing the matches in D1. The site renders them
+like the HN front page — title (link), points, age, comments — and tracks which
+links you've opened. Curation runs on demand (the Refresh button / Telegram
+`/fetch`) and on a `*/5` cron that pushes a Telegram summary at each user's
+configured slot.
 
 ## Stack
 
-Vite + React 19 SPA and a Hono API served by one Cloudflare Worker; D1 (Drizzle)
-for storage; Workers AI for filtering; Zod contracts in `shared/`; Terraform for
-infra (prod D1, Cloudflare Access, custom domain); Playwright e2e; a single
-`pnpm check` gate enforced as the pre-commit hook.
+Vite + React 19 SPA and a Hono API served by one Cloudflare Worker; in-app Google
+OAuth sign-in (`arctic`) with D1-backed sessions; D1 (Drizzle) for storage;
+Workers AI for filtering; Zod contracts in `shared/`; Terraform for infra (prod
+D1, custom domain); Playwright e2e; a single `pnpm check` gate enforced as the
+pre-commit hook.
 
 ## Develop
 
@@ -34,10 +37,12 @@ button or `await fetch("/api/digest/run", { method: "POST" })`.
 
 ## Pages
 
-- **`/`** — the curated feed (the latest morning's picks).
-- **`/preferences`** — your signed-in identity, a logout link, a big plain-text
+- **`/`** — your curated feed.
+- **`/preferences`** — your signed-in identity, a Log out button, a big plain-text
   box describing what you want to read, and a Generate start command button for
   linking Telegram.
+
+Unauthenticated visitors get a "Sign in with Google" screen.
 
 ## Telegram bot
 

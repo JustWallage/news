@@ -1,5 +1,9 @@
+import { env } from "cloudflare:workers";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { sessions } from "../../db/schema";
+import { getDb } from "../lib/db";
+import { createSession, SESSION_COOKIE } from "../lib/session";
 import { authMiddleware, type AuthBindings } from "./auth";
 
 interface TestEnv {
@@ -14,86 +18,76 @@ const probeApp = () => {
   return app;
 };
 
-const ALLOWED = "just@wallage.nl";
+const USER = "just@wallage.nl";
+
+beforeEach(async () => {
+  await getDb(env).delete(sessions);
+});
+
+async function sessionCookie(): Promise<string> {
+  const { token } = await createSession(getDb(env), USER, new Date());
+  return `${SESSION_COOKIE}=${token}`;
+}
 
 describe("authMiddleware — production", () => {
-  const env: AuthBindings = {
-    ENVIRONMENT: "production",
-    ALLOWED_EMAILS: ALLOWED,
-  };
+  const prodEnv: AuthBindings = { ENVIRONMENT: "production", DB: env.DB };
 
-  it("accepts an allowlisted Cloudflare Access identity", async () => {
+  it("accepts a valid session cookie", async () => {
     const res = await probeApp().request(
       "/probe",
-      { headers: { "Cf-Access-Authenticated-User-Email": "just@wallage.nl" } },
-      env,
+      { headers: { cookie: await sessionCookie() } },
+      prodEnv,
     );
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ email: "just@wallage.nl" });
+    expect(await res.json()).toEqual({ email: USER });
   });
 
-  it("rejects when the Access header is missing", async () => {
-    const res = await probeApp().request("/probe", {}, env);
+  it("rejects when the session cookie is missing", async () => {
+    const res = await probeApp().request("/probe", {}, prodEnv);
     expect(res.status).toBe(401);
   });
 
-  it("rejects identities not in ALLOWED_EMAILS", async () => {
+  it("rejects an unknown session token", async () => {
     const res = await probeApp().request(
       "/probe",
-      {
-        headers: {
-          "Cf-Access-Authenticated-User-Email": "intruder@example.com",
-        },
-      },
-      env,
+      { headers: { cookie: `${SESSION_COOKIE}=bogus` } },
+      prodEnv,
     );
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
   });
 
   it("ignores e2e test headers in production", async () => {
     const res = await probeApp().request(
       "/probe",
-      {
-        headers: {
-          "X-Test-User-Email": "just@wallage.nl",
-          "X-Test-Auth": "whatever",
-        },
-      },
-      { ...env, TEST_AUTH_TOKEN: "whatever" },
+      { headers: { "X-Test-User-Email": USER, "X-Test-Auth": "whatever" } },
+      { ...prodEnv, TEST_AUTH_TOKEN: "whatever" },
     );
     expect(res.status).toBe(401);
   });
 });
 
 describe("authMiddleware — unknown environment fails closed (like production)", () => {
-  const env: AuthBindings = {
-    ENVIRONMENT: "weird-env",
-    ALLOWED_EMAILS: ALLOWED,
-  };
+  const weirdEnv: AuthBindings = { ENVIRONMENT: "weird-env", DB: env.DB };
 
-  it("requires the Access header", async () => {
-    const res = await probeApp().request("/probe", {}, env);
+  it("requires a session cookie", async () => {
+    const res = await probeApp().request("/probe", {}, weirdEnv);
     expect(res.status).toBe(401);
   });
 
-  it("still enforces the allowlist", async () => {
+  it("accepts a valid session cookie", async () => {
     const res = await probeApp().request(
       "/probe",
-      {
-        headers: {
-          "Cf-Access-Authenticated-User-Email": "intruder@example.com",
-        },
-      },
-      env,
+      { headers: { cookie: await sessionCookie() } },
+      weirdEnv,
     );
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
   });
 });
 
 describe("authMiddleware — e2e", () => {
-  const env: AuthBindings = {
+  const e2eEnv: AuthBindings = {
     ENVIRONMENT: "e2e",
-    ALLOWED_EMAILS: ALLOWED,
+    DB: env.DB,
     TEST_AUTH_TOKEN: "secret-token",
   };
 
@@ -106,7 +100,7 @@ describe("authMiddleware — e2e", () => {
           "X-Test-Auth": "secret-token",
         },
       },
-      env,
+      e2eEnv,
     );
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ email: "tester@example.com" });
@@ -121,16 +115,16 @@ describe("authMiddleware — e2e", () => {
           "X-Test-Auth": "wrong",
         },
       },
-      env,
+      e2eEnv,
     );
     expect(res.status).toBe(401);
   });
 
-  it("does not fall back to the Access header", async () => {
+  it("does not fall back to a session cookie", async () => {
     const res = await probeApp().request(
       "/probe",
-      { headers: { "Cf-Access-Authenticated-User-Email": "just@wallage.nl" } },
-      env,
+      { headers: { cookie: await sessionCookie() } },
+      e2eEnv,
     );
     expect(res.status).toBe(401);
   });
@@ -141,21 +135,17 @@ describe("authMiddleware — local", () => {
     const res = await probeApp().request(
       "/probe",
       {},
-      {
-        ENVIRONMENT: "local",
-        ALLOWED_EMAILS: ALLOWED,
-        DEV_USER_EMAIL: "just@wallage.nl",
-      },
+      { ENVIRONMENT: "local", DB: env.DB, DEV_USER_EMAIL: USER },
     );
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ email: "just@wallage.nl" });
+    expect(await res.json()).toEqual({ email: USER });
   });
 
   it("errors when DEV_USER_EMAIL is unset", async () => {
     const res = await probeApp().request(
       "/probe",
       {},
-      { ENVIRONMENT: "local", ALLOWED_EMAILS: ALLOWED },
+      { ENVIRONMENT: "local", DB: env.DB },
     );
     expect(res.status).toBe(500);
   });

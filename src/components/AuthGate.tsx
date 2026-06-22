@@ -45,20 +45,19 @@ export function AuthGate({ children }: { children: ReactNode }) {
       <div className="flex min-h-dvh items-center justify-center p-4">
         <Card className="w-full max-w-sm">
           <CardHeader>
-            <CardTitle>Not signed in</CardTitle>
+            <CardTitle>Sign in</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              This feed is protected by Cloudflare Access. Reload to sign in
-              with Google; in local dev, check DEV_USER_EMAIL in .dev.vars.
+              Sign in with your Google account to see your personalized feed.
             </p>
             <Button
               className="w-full"
               onClick={() => {
-                window.location.reload();
+                window.location.href = "/auth/login";
               }}
             >
-              Reload
+              Sign in with Google
             </Button>
           </CardContent>
         </Card>
