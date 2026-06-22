@@ -28,14 +28,6 @@ provider "cloudflare" {
   api_token = var.cloudflare_api_token
 }
 
-# The custom domain + its Access app activate together, and only once the
-# justwallage.nl zone id is supplied (which it is, from day one). A self_hosted
-# Access app rejects a workers.dev hostname, so it is gated on the zone id.
-locals {
-  custom_domain_active = var.custom_domain != null && var.custom_domain_zone_id != null
-  app_hostname         = local.custom_domain_active ? var.custom_domain : "news.${var.workers_dev_subdomain}"
-}
-
 resource "cloudflare_d1_database" "prod" {
   account_id = var.cloudflare_account_id
   name       = "news-prod"
@@ -44,62 +36,8 @@ resource "cloudflare_d1_database" "prod" {
   }
 }
 
-# --- Cloudflare Access (Zero Trust) ---
-
-resource "cloudflare_zero_trust_access_identity_provider" "google" {
-  account_id = var.cloudflare_account_id
-  name       = "Google"
-  type       = "google"
-
-  config = {
-    client_id     = var.google_client_id
-    client_secret = var.google_client_secret
-  }
-}
-
-resource "cloudflare_zero_trust_access_application" "news" {
-  count = local.custom_domain_active ? 1 : 0
-
-  account_id                = var.cloudflare_account_id
-  name                      = "news"
-  domain                    = var.custom_domain
-  type                      = "self_hosted"
-  session_duration          = "730h"
-  auto_redirect_to_identity = true
-  app_launcher_visible      = true
-  allowed_idps              = [cloudflare_zero_trust_access_identity_provider.google.id]
-
-  policies = [{
-    name     = "Allow owner only"
-    decision = "allow"
-    include = [
-      { email = { email = "just@wallage.nl" } },
-    ]
-  }]
-}
-
-# Telegram delivers webhook updates to /telegram/webhook, which cannot present a
-# CF Access identity. A path-scoped application with a bypass policy lets those
-# requests through (a more specific path takes precedence over the hostname app
-# above); the worker still authenticates them with its secret-token check.
-resource "cloudflare_zero_trust_access_application" "telegram_webhook" {
-  count = local.custom_domain_active ? 1 : 0
-
-  account_id       = var.cloudflare_account_id
-  name             = "news-telegram-webhook"
-  domain           = "${var.custom_domain}/telegram/webhook"
-  type             = "self_hosted"
-  session_duration = "730h"
-
-  policies = [{
-    name     = "Bypass for Telegram webhook"
-    decision = "bypass"
-    include  = [{ everyone = {} }]
-  }]
-}
-
-# NOTE: the Workers custom domain (news.justwallage.nl → the worker) is created
-# by wrangler at deploy time, NOT here. Terraform runs before the worker exists,
-# so a cloudflare_workers_custom_domain resource 404s on the first deploy. See
-# wrangler.jsonc (production env `routes`). This Access app only guards the
-# hostname and has no dependency on the worker.
+# Authentication is handled in the Worker (Google OAuth + sessions), not by
+# Cloudflare Access — there are no Access resources here. The Workers custom
+# domain (news.justwallage.nl → the worker) is created by wrangler at deploy
+# time, NOT here: Terraform runs before the worker exists. See wrangler.jsonc
+# (production env `routes`).

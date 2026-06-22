@@ -1,6 +1,6 @@
-// All digest scheduling reasons in Europe/Amsterdam wall-clock time, so the
-// 06:20 run lands correctly across the CET/CEST DST switch (the cron fires at
-// two fixed UTC times and the scheduled handler keeps only the 06:xx one).
+// Digest scheduling reasons in Europe/Amsterdam wall-clock time, so a user's
+// configured Telegram slot fires at the right local minute across the CET/CEST
+// DST switch (the */5 cron compares against amsterdamMinuteOfDay).
 
 const TZ = "Europe/Amsterdam";
 
@@ -12,16 +12,6 @@ export function amsterdamDate(now: Date): string {
     month: "2-digit",
     day: "2-digit",
   }).format(now);
-}
-
-/** Hour 0–23 for the given instant in Amsterdam local time. */
-export function amsterdamHour(now: Date): number {
-  const hour = new Intl.DateTimeFormat("en-GB", {
-    timeZone: TZ,
-    hour: "2-digit",
-    hour12: false,
-  }).format(now);
-  return Number(hour) % 24;
 }
 
 /** Minutes since midnight (0–1439) for the given instant in Amsterdam time. */

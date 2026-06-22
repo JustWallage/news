@@ -1,12 +1,14 @@
 # News
 
-A personal, AI-curated Hacker News front page for one user (just@wallage.nl).
-A single Cloudflare Worker serves the React SPA as static assets and the Hono
-API; every morning at 06:20 Europe/Amsterdam a cron pulls the HN front page,
-filters it through Workers AI (Llama 70B) against a plain-text preferences blob,
-and stores the matches in D1. [SPEC.md](docs/superpowers/specs/2026-06-17-news-design.md)
-is the authoritative design document; [docs/BACKLOG.md](docs/BACKLOG.md) holds
-deferred ideas.
+A public, AI-curated Hacker News front page: anyone signs in with Google and
+gets their own feed. A single Cloudflare Worker serves the React SPA as static
+assets and the Hono API, runs the Google OAuth sign-in flow itself (no Cloudflare
+Access), and filters the HN front page through Workers AI (Llama 70B) against
+each user's plain-text preferences blob, storing the matches in D1. Curation runs
+on demand (homepage Refresh / Telegram `/fetch`) and on a `*/5` cron that pushes a
+Telegram summary to each user at their configured slot.
+[SPEC.md](docs/superpowers/specs/2026-06-17-news-design.md) is the original design
+document; [docs/BACKLOG.md](docs/BACKLOG.md) holds deferred ideas.
 
 ## Structure
 

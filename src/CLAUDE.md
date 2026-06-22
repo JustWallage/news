@@ -5,8 +5,9 @@
   revalidate); writes go through `apiFetch` from `lib/api.ts`. Everything is
   zod-parsed.
 - HomePage has a **Refresh** button → `POST /api/digest/run` (re-curates the
-  current user's feed on demand, same endpoint the 06:20 cron uses), then
-  re-fetches the feed.
+  current user's feed on demand), then re-fetches the feed.
+- `AuthGate` shows a "Sign in with Google" screen (→ `/auth/login`) when
+  `/api/health` 401s; `Layout`'s header has a sign-out button → `POST /auth/logout`.
 - Opening a story title fires a fire-and-forget `POST /api/stories/:id/open`
   while the browser follows the link (new tab) — best effort, never blocks nav.
 - PreferencesPage seeds the textarea from the server only while it is pristine

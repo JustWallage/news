@@ -16,10 +16,6 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
       TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      TF_VAR_workers_dev_subdomain: ${{ secrets.WORKERS_DEV_SUBDOMAIN }}
-      TF_VAR_google_client_id: ${{ secrets.GOOGLE_CLIENT_ID }}
-      TF_VAR_google_client_secret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-      TF_VAR_custom_domain_zone_id: ${{ secrets.CUSTOM_DOMAIN_ZONE_ID }}
     outputs:
       d1_database_id_prod: ${{ steps.tf_outputs.outputs.d1_database_id_prod }}
     steps:
@@ -122,6 +118,23 @@ jobs:
           if [ -n "$TELEGRAM_WEBHOOK_SECRET" ]; then
             printf '%s' "$TELEGRAM_WEBHOOK_SECRET" \
               | pnpm exec wrangler secret put TELEGRAM_WEBHOOK_SECRET -c dist/news/wrangler.json
+          fi
+
+      # Push the Google OAuth credentials onto the just-deployed worker. Without
+      # them the worker runs but /auth/* fails closed (503) — login is broken
+      # until both are set (production never falls back to the fake OAuth seam).
+      - name: Set Google worker secrets
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+        run: |
+          if [ -n "$GOOGLE_CLIENT_ID" ]; then
+            printf '%s' "$GOOGLE_CLIENT_ID" \
+              | pnpm exec wrangler secret put GOOGLE_CLIENT_ID -c dist/news/wrangler.json
+          fi
+          if [ -n "$GOOGLE_CLIENT_SECRET" ]; then
+            printf '%s' "$GOOGLE_CLIENT_SECRET" \
+              | pnpm exec wrangler secret put GOOGLE_CLIENT_SECRET -c dist/news/wrangler.json
           fi
 
       # Register the bot's slash-command list so Telegram shows autocomplete.

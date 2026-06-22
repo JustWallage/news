@@ -13,11 +13,16 @@ import type { Deps } from "./lib/deps";
 // TELEGRAM_BOT_USERNAME is widened to string for the same reason as ENVIRONMENT:
 // the committed var is "" but production carries a real username, so the type
 // must not pretend it is always the empty-string literal.
+// GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET are production-only secrets (the Worker
+// runs the Google OAuth flow). Optional here for the same reason as the Telegram
+// secrets: local/e2e use the fake OAuth seam, so their absence is expected there.
 export type Bindings = Omit<Env, "ENVIRONMENT" | "TELEGRAM_BOT_USERNAME"> & {
   ENVIRONMENT: string;
   TELEGRAM_BOT_USERNAME: string;
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_WEBHOOK_SECRET?: string;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
 };
 
 export interface AppEnv {
