@@ -38,6 +38,34 @@ test("visiting the homepage auto-refreshes the feed without clicking Refresh", a
   await expect(page.getByText(/Bitcoin hits a new all-time high/)).toBeHidden();
 });
 
+test("shows a refreshing indicator above the feed while curating", async ({
+  page,
+  request,
+}) => {
+  // Seed a feed so the indicator renders above existing stories.
+  await request.put("/api/preferences", { data: { text: "rust" } });
+  await request.post("/api/digest/run");
+
+  // Hold the on-visit digest run open so the in-flight state is observable.
+  let release = (): void => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/digest/run", async (route) => {
+    await gate;
+    await route.continue();
+  });
+
+  await page.goto("/");
+  await expect(page.getByText("Refreshing your stories…")).toBeVisible();
+
+  release();
+  await expect(page.getByText("Refreshing your stories…")).toBeHidden();
+  await expect(
+    page.getByRole("link", { name: /Rust's new borrow checker/ }),
+  ).toBeVisible();
+});
+
 test("curated stories render HN-style with working links", async ({
   page,
   request,
