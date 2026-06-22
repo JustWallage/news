@@ -133,6 +133,7 @@ export async function loadTelegramStatus(
     linked: row?.chatId != null,
     chatLabel: row?.chatId == null ? null : chatLabel(row),
     slots,
+    timezone: row?.timezone ?? null,
   };
 }
 
@@ -156,18 +157,36 @@ export async function disconnectTelegram(
 export async function mintLinkCode(
   db: Db,
   userEmail: string,
+  timezone: string,
   now: Date,
 ): Promise<{ code: string; expiresAt: Date }> {
   const code = generateLinkCode();
   const expiresAt = new Date(now.getTime() + LINK_CODE_TTL_MS);
   await db
     .insert(telegram)
-    .values({ userEmail, linkCode: code, linkCodeExpiresAt: expiresAt })
+    .values({
+      userEmail,
+      linkCode: code,
+      linkCodeExpiresAt: expiresAt,
+      timezone,
+    })
     .onConflictDoUpdate({
       target: telegram.userEmail,
-      set: { linkCode: code, linkCodeExpiresAt: expiresAt },
+      set: { linkCode: code, linkCodeExpiresAt: expiresAt, timezone },
     });
   return { code, expiresAt };
+}
+
+/** Upsert just the user's IANA timezone (works before the chat is linked). */
+export async function saveTimezone(
+  db: Db,
+  userEmail: string,
+  timezone: string,
+): Promise<void> {
+  await db
+    .insert(telegram)
+    .values({ userEmail, timezone })
+    .onConflictDoUpdate({ target: telegram.userEmail, set: { timezone } });
 }
 
 async function handleStart(
@@ -200,7 +219,9 @@ async function handleStart(
       linkCodeExpiresAt: null,
     })
     .where(eq(telegram.userEmail, row.userEmail));
-  return `✅ Linked! I'll send your daily summaries here.\n\n${HELP}`;
+  const tzLine =
+    row.timezone === null ? "" : `Your timezone is set to ${row.timezone}.\n`;
+  return `✅ Linked! I'll send your daily summaries here.\n${tzLine}\n${HELP}`;
 }
 
 async function setPreferences(

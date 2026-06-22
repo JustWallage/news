@@ -61,8 +61,24 @@ export const telegramStatusSchema = z.object({
   chatLabel: z.string().nullable(),
   /** The three daily-summary slots as "HH:MM", null when unset. */
   slots: z.array(z.string().nullable()).length(3),
+  /** IANA zone the slots are interpreted in; null falls back to Europe/Amsterdam. */
+  timezone: z.string().nullable(),
 });
 export type TelegramStatus = z.infer<typeof telegramStatusSchema>;
+
+function isValidTimeZone(tz: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Request body for both POST /telegram/link-code and PUT /telegram/timezone.
+export const telegramTimezoneSchema = z.object({
+  timezone: z.string().refine(isValidTimeZone, "invalid IANA time zone"),
+});
 
 // One daily-summary time as "HH:MM" (24h), or null to leave that slot unset.
 const telegramSlotSchema = z

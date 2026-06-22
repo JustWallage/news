@@ -15,12 +15,33 @@ import { Textarea } from "@/components/ui/textarea";
 import { useCachedFetch } from "@/hooks/useCachedFetch";
 import { apiFetch, jsonInit } from "@/lib/api";
 
+const TIMEZONES = Intl.supportedValuesOf("timeZone");
+
 async function logout(): Promise<void> {
   await apiFetch("/auth/logout", okSchema, jsonInit("POST", {}));
   window.location.href = "/";
 }
 
 const SLOT_LABELS = ["First", "Second", "Third"];
+
+function TrashIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 6h18" />
+      <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6M14 11v6" />
+    </svg>
+  );
+}
 
 function TelegramSection() {
   const { data, mutate } = useCachedFetch(
@@ -33,21 +54,47 @@ function TelegramSection() {
     "idle",
   );
   const [copied, setCopied] = useState(false);
+  const [timezone, setTimezone] = useState(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+  );
   const [slots, setSlots] = useState<string[]>(["", "", ""]);
   const [slotStatus, setSlotStatus] = useState<
     "idle" | "saving" | "saved" | "error"
   >("idle");
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
-  // Seed the time fields from the server only while they are still pristine, so
-  // a background revalidate can't clobber what the user is editing.
+  // Seed from the server only while untouched, so a background revalidate can
+  // never clobber an in-flight choice (same guard as the interests textarea).
+  const tzDirty = useRef(false);
   const slotsDirty = useRef(false);
+
+  useEffect(() => {
+    if (data?.timezone != null && !tzDirty.current) {
+      setTimezone(data.timezone);
+    }
+  }, [data]);
 
   useEffect(() => {
     if (data !== undefined && !slotsDirty.current) {
       setSlots(data.slots.map((slot) => slot ?? ""));
     }
   }, [data]);
+
+  const changeTimezone = (next: string): void => {
+    tzDirty.current = true;
+    setTimezone(next);
+    apiFetch(
+      "/api/telegram/timezone",
+      okSchema,
+      jsonInit("PUT", { timezone: next }),
+    )
+      .then(() => {
+        mutate();
+      })
+      .catch(() => {
+        // Leave the selector on the chosen value; a later save can retry.
+      });
+  };
 
   const saveSlots = (): void => {
     setSlotStatus("saving");
@@ -86,7 +133,7 @@ function TelegramSection() {
     apiFetch(
       "/api/telegram/link-code",
       telegramLinkCodeSchema,
-      jsonInit("POST", {}),
+      jsonInit("POST", { timezone }),
     )
       .then((next) => {
         setCode(next);
@@ -147,29 +194,50 @@ function TelegramSection() {
           <div className="space-y-2">
             <Label>Daily summary times</Label>
             <p className="text-sm text-muted-foreground">
-              Up to three times a day (Europe/Amsterdam). Leave a slot empty to
-              skip it.
+              Up to three times a day, in your selected timezone. Use the trash
+              button to clear a time.
             </p>
             <div className="flex flex-wrap gap-2">
-              {slots.map((value, i) => (
-                <Input
-                  key={SLOT_LABELS[i]}
-                  type="time"
-                  step={300}
-                  value={value}
-                  aria-label={`${SLOT_LABELS[i]} daily summary time`}
-                  className="w-32"
-                  onChange={(event) => {
-                    slotsDirty.current = true;
-                    setSlots(
-                      slots.map((slot, j) =>
-                        j === i ? event.target.value : slot,
-                      ),
-                    );
-                    setSlotStatus("idle");
-                  }}
-                />
-              ))}
+              {slots.map((value, i) => {
+                const name = `${SLOT_LABELS[i] ?? `Slot ${i + 1}`} daily summary time`;
+                return (
+                  <div key={name} className="flex items-center gap-1">
+                    <Input
+                      type="time"
+                      step={300}
+                      value={value}
+                      aria-label={name}
+                      className="w-32"
+                      onChange={(event) => {
+                        slotsDirty.current = true;
+                        setSlots(
+                          slots.map((slot, j) =>
+                            j === i ? event.target.value : slot,
+                          ),
+                        );
+                        setSlotStatus("idle");
+                      }}
+                    />
+                    {value !== "" && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Clear ${name}`}
+                        onClick={() => {
+                          slotsDirty.current = true;
+                          setSlots(
+                            slots.map((slot, j) => (j === i ? "" : slot)),
+                          );
+                          setSlotStatus("idle");
+                        }}
+                      >
+                        <TrashIcon />
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             <div className="flex items-center gap-3">
               <Button onClick={saveSlots} disabled={slotStatus === "saving"}>
@@ -205,6 +273,27 @@ function TelegramSection() {
         confirmLabel="Yes, disconnect"
         onConfirm={disconnect}
       />
+
+      <div className="space-y-1">
+        <Label htmlFor="timezone">Timezone</Label>
+        <p className="text-sm text-muted-foreground">
+          Your daily summaries are scheduled in this timezone.
+        </p>
+        <select
+          id="timezone"
+          value={timezone}
+          onChange={(event) => {
+            changeTimezone(event.target.value);
+          }}
+          className="flex h-9 w-full max-w-xs rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        >
+          {TIMEZONES.map((tz) => (
+            <option key={tz} value={tz}>
+              {tz}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
         <li>Generate your start command below.</li>

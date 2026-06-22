@@ -55,7 +55,9 @@ export const preferences = sqliteTable("preferences", {
 // One row per user linking a Telegram chat to the account. The webhook looks
 // chats up by chatId; linkCode holds the pending one-time code minted by the
 // web UI (cleared once /start consumes it). slot1-3 are daily-summary times as
-// minute-of-day (0-1439, rounded to 5); null means that slot is unset.
+// minute-of-day (0-1439, rounded to 5); null means that slot is unset. timezone
+// is the user's IANA zone the slots are interpreted in; null falls back to
+// Europe/Amsterdam.
 export const telegram = sqliteTable(
   "telegram",
   {
@@ -68,6 +70,7 @@ export const telegram = sqliteTable(
     slot1: integer("slot1"),
     slot2: integer("slot2"),
     slot3: integer("slot3"),
+    timezone: text("timezone"),
   },
   (t) => [uniqueIndex("telegram_chat_id_idx").on(t.chatId)],
 );

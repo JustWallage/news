@@ -90,15 +90,21 @@ describe("api", () => {
       linked: boolean;
       chatLabel: string | null;
       slots: (string | null)[];
+      timezone: string | null;
     }>();
     expect(before).toEqual({
       linked: false,
       chatLabel: null,
       slots: [null, null, null],
+      timezone: null,
     });
 
     const minted = await (
-      await app.request("/api/telegram/link-code", json("POST", {}), env)
+      await app.request(
+        "/api/telegram/link-code",
+        json("POST", { timezone: "America/New_York" }),
+        env,
+      )
     ).json<{ code: string; url: string | null; expiresAt: string }>();
     expect(minted.code).toMatch(/^[0-9a-f]{8}$/);
     expect(minted.url).toBeNull();
@@ -108,11 +114,46 @@ describe("api", () => {
       .from(telegram)
       .where(eq(telegram.userEmail, EMAIL));
     expect(stored[0]?.linkCode).toBe(minted.code);
+    expect(stored[0]?.timezone).toBe("America/New_York");
+  });
+
+  it("rejects a link code with an invalid timezone", async () => {
+    const res = await app.request(
+      "/api/telegram/link-code",
+      json("POST", { timezone: "Mars/Olympus" }),
+      env,
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("sets the timezone and reports it in status", async () => {
+    const put = await app.request(
+      "/api/telegram/timezone",
+      json("PUT", { timezone: "Asia/Tokyo" }),
+      env,
+    );
+    expect(put.status).toBe(200);
+
+    const status = await (
+      await app.request("/api/telegram", get, env)
+    ).json<{ timezone: string | null }>();
+    expect(status.timezone).toBe("Asia/Tokyo");
+
+    const bad = await app.request(
+      "/api/telegram/timezone",
+      json("PUT", { timezone: "not-a-zone" }),
+      env,
+    );
+    expect(bad.status).toBe(400);
   });
 
   it("links a chat through the webhook with the right secret", async () => {
     const minted = await (
-      await app.request("/api/telegram/link-code", json("POST", {}), env)
+      await app.request(
+        "/api/telegram/link-code",
+        json("POST", { timezone: "America/New_York" }),
+        env,
+      )
     ).json<{ code: string }>();
 
     const webhook = (secret: string | null, body: unknown): RequestInit => ({
@@ -169,7 +210,11 @@ describe("api", () => {
     expect(notLinked.status).toBe(409);
 
     const minted = await (
-      await app.request("/api/telegram/link-code", json("POST", {}), env)
+      await app.request(
+        "/api/telegram/link-code",
+        json("POST", { timezone: "America/New_York" }),
+        env,
+      )
     ).json<{ code: string }>();
     await app.request(
       "/telegram/webhook",
@@ -215,7 +260,11 @@ describe("api", () => {
     expect(notLinked.status).toBe(409);
 
     const minted = await (
-      await app.request("/api/telegram/link-code", json("POST", {}), env)
+      await app.request(
+        "/api/telegram/link-code",
+        json("POST", { timezone: "America/New_York" }),
+        env,
+      )
     ).json<{ code: string }>();
     const linkUpdate = {
       message: { chat: { id: 888 }, text: `/start ${minted.code}` },
@@ -239,7 +288,11 @@ describe("api", () => {
 
   it("disconnects a linked chat via DELETE /api/telegram", async () => {
     const minted = await (
-      await app.request("/api/telegram/link-code", json("POST", {}), env)
+      await app.request(
+        "/api/telegram/link-code",
+        json("POST", { timezone: "America/New_York" }),
+        env,
+      )
     ).json<{ code: string }>();
     await app.request(
       "/telegram/webhook",

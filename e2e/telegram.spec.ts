@@ -15,7 +15,11 @@ async function linkChat(
   const chatId = Math.floor(Math.random() * 1_000_000_000);
   const username = `e2e_${chatId}`;
   const minted = telegramLinkCodeSchema.parse(
-    await (await request.post("/api/telegram/link-code", { data: {} })).json(),
+    await (
+      await request.post("/api/telegram/link-code", {
+        data: { timezone: "America/New_York" },
+      })
+    ).json(),
   );
   const linked = await request.post("/telegram/webhook", {
     headers: { "X-Telegram-Bot-Api-Secret-Token": WEBHOOK_SECRET },
@@ -50,6 +54,22 @@ test("the preferences page reveals a Telegram connect code with a copy button", 
   await expect(page.getByRole("button", { name: "Copied" })).toBeVisible();
 });
 
+test("the timezone selector persists the chosen zone", async ({ page }) => {
+  await page.goto("/preferences");
+  const select = page.getByLabel("Timezone");
+  await Promise.all([
+    page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/telegram/timezone") &&
+        r.request().method() === "PUT",
+    ),
+    select.selectOption("Asia/Tokyo"),
+  ]);
+
+  await page.reload();
+  await expect(page.getByLabel("Timezone")).toHaveValue("Asia/Tokyo");
+});
+
 test("disconnects Telegram from the preferences page after confirming", async ({
   page,
   request,
@@ -69,6 +89,38 @@ test("disconnects Telegram from the preferences page after confirming", async ({
   await expect(
     page.getByRole("button", { name: "Disconnect", exact: true }),
   ).toBeHidden();
+});
+
+test("clears a saved daily summary time with the trash button", async ({
+  page,
+  request,
+}) => {
+  await linkChat(request);
+  await page.goto("/preferences");
+
+  const first = page.getByLabel("First daily summary time", { exact: true });
+  const save = page.getByRole("button", { name: "Save times" });
+  const slotsSaved = (): Promise<unknown> =>
+    page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/telegram/slots") &&
+        r.request().method() === "PUT",
+    );
+
+  await first.fill("08:00");
+  await Promise.all([slotsSaved(), save.click()]);
+
+  // The trash button is the only way to clear a set time.
+  await page
+    .getByRole("button", { name: "Clear First daily summary time" })
+    .click();
+  await expect(first).toHaveValue("");
+  await Promise.all([slotsSaved(), save.click()]);
+
+  await page.reload();
+  await expect(
+    page.getByLabel("First daily summary time", { exact: true }),
+  ).toHaveValue("");
 });
 
 test("the /disconnect bot command unlinks the chat", async ({ request }) => {

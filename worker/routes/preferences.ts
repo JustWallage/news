@@ -5,16 +5,9 @@ import { preferencesUpdateSchema } from "../../shared/api";
 import type { AppEnv } from "../env";
 import { getDb } from "../lib/db";
 import { savePreferences } from "../lib/digest";
+import { parseJsonBody } from "../lib/http";
 
 export const preferencesRoutes = new Hono<AppEnv>();
-
-async function parseJsonBody(req: Request): Promise<unknown> {
-  try {
-    return await req.json();
-  } catch {
-    return null;
-  }
-}
 
 preferencesRoutes.get("/", async (c) => {
   const db = getDb(c.env);

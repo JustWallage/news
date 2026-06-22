@@ -1,6 +1,6 @@
-// Digest scheduling reasons in Europe/Amsterdam wall-clock time, so a user's
-// configured Telegram slot fires at the right local minute across the CET/CEST
-// DST switch (the */5 cron compares against amsterdamMinuteOfDay).
+// Digest scheduling reasons in wall-clock time: a user's configured Telegram
+// slot fires at the right local minute across DST because Intl resolves the
+// offset per instant. minuteOfDayInTz powers the */5 due check.
 
 const TZ = "Europe/Amsterdam";
 
@@ -14,10 +14,10 @@ export function amsterdamDate(now: Date): string {
   }).format(now);
 }
 
-/** Minutes since midnight (0–1439) for the given instant in Amsterdam time. */
-export function amsterdamMinuteOfDay(now: Date): number {
+/** Minutes since midnight (0–1439) for the given instant in the given IANA zone. */
+export function minuteOfDayInTz(now: Date, timeZone: string): number {
   const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: TZ,
+    timeZone,
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,

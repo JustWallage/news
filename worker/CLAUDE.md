@@ -65,6 +65,12 @@ no `ENVIRONMENT`/`isTest` checks leak into logic, and there is no test-only rout
 - Slot times are minute-of-day rounded to 5 (`parseDailyTime`). They are set
   either from the bot (`/daily_time*`) or the web UI (`PUT /api/telegram/slots`,
   body `telegramSlotsUpdateSchema`, 409 until linked → `saveSlots`).
+- Slots are interpreted in the user's `telegram.timezone` (IANA; null →
+  Europe/Amsterdam). The timezone is captured from the browser on
+  `POST /link-code` and editable via `PUT /api/telegram/timezone`
+  (`saveTimezone` upsert) — both bodies validated by `telegramTimezoneSchema`.
+  `minuteOfDayInTz` (`lib/time.ts`) is the zone-aware conversion the `*/5`
+  due-check uses.
 
 ## Data model & invariants
 
@@ -109,11 +115,14 @@ prefVersion, userEmail, now)` then, per user, reuses curations
 - `POST /api/digest/run` (homepage Refresh + e2e) runs the digest for the current
   user via `c.var.deps` — no environment gate.
 - `index.ts` `scheduled` has ONE cron, `*/5 * * * *` → `runTelegramDigests` →
-  `sendDueDigests`: query the `telegram` rows whose `chatId` is set and a slot
-  matches the current Amsterdam minute; if none are due, return WITHOUT touching
-  HN; otherwise `fetchFrontPage` ONCE and `curateForUser` + send to every due user
-  in parallel (`Promise.all`). A linked chat with a configured slot is the only
-  opt-in to a scheduled digest; there is no longer a separate web-digest cron.
+  `sendDueDigests`: load the `telegram` rows whose `chatId` is set and at least
+  one slot is configured, then keep those whose slot matches the current minute
+  IN THAT ROW'S timezone (`minuteOfDayInTz`, null → Europe/Amsterdam) — the due
+  check is per-row in JS, not a single SQL minute filter. If none are due, return
+  WITHOUT touching HN; otherwise `fetchFrontPage` ONCE and `curateForUser` + send
+  to every due user in parallel (`Promise.all`). A linked chat with a configured
+  slot is the only opt-in to a scheduled digest; there is no longer a separate
+  web-digest cron.
 - Responses are built through `shared/api.ts` schema `.parse(...)` in
   `lib/serialize.ts` (the no-casts pattern).
 

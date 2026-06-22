@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, or } from "drizzle-orm";
+import { and, isNotNull, or } from "drizzle-orm";
 import { telegram, type TelegramRow } from "../../db/schema";
 import type { Bindings } from "../env";
 import type { Db } from "./db";
@@ -12,7 +12,8 @@ import {
 } from "./digest";
 import { loadFeed } from "./feed";
 import { formatDigestMessage } from "./telegram";
-import { amsterdamMinuteOfDay } from "./time";
+import { dueSlot } from "./telegram-bot";
+import { minuteOfDayInTz } from "./time";
 
 // Re-run the digest for the user, then push the freshly curated feed to their
 // Telegram chat. Used by the Telegram /fetch command (a single-user on-demand
@@ -34,30 +35,35 @@ export async function sendDailyDigest(
 type LinkedRow = TelegramRow & { chatId: number };
 
 // The */5 heartbeat core. Sends a summary to every user whose configured slot
-// matches the current Amsterdam minute. HN is queried at most once per tick —
-// only when ≥1 user is due — and the shared front page is then evaluated and
-// delivered to each due user in parallel. Deps are injected for testing.
+// matches the current minute in their own timezone (Europe/Amsterdam when
+// unset) — so the due check is per-row in JS, not a single SQL minute filter.
+// HN is queried at most once per tick — only when ≥1 user is due — and the
+// shared front page is then evaluated and delivered to each due user in
+// parallel. Deps are injected for testing.
 export async function sendDueDigests(
   db: Db,
   deps: Deps,
   appUrl: string,
   now: Date,
 ): Promise<void> {
-  const minute = amsterdamMinuteOfDay(now);
-  const rows = await db
+  const linked = await db
     .select()
     .from(telegram)
     .where(
       and(
         isNotNull(telegram.chatId),
         or(
-          eq(telegram.slot1, minute),
-          eq(telegram.slot2, minute),
-          eq(telegram.slot3, minute),
+          isNotNull(telegram.slot1),
+          isNotNull(telegram.slot2),
+          isNotNull(telegram.slot3),
         ),
       ),
     );
-  const due = rows.filter((row): row is LinkedRow => row.chatId !== null);
+  const due = linked.filter(
+    (row): row is LinkedRow =>
+      row.chatId !== null &&
+      dueSlot(row, minuteOfDayInTz(now, row.timezone ?? "Europe/Amsterdam")),
+  );
   if (due.length === 0) {
     return;
   }

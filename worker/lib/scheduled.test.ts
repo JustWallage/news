@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { curations, preferences, stories, telegram } from "../../db/schema";
 import { getDb } from "./db";
@@ -8,7 +9,7 @@ import { fakeAiFilter } from "./fakes";
 import type { HnClient } from "./hn";
 import { sendDailyDigest, sendDueDigests } from "./scheduled";
 import type { TelegramClient } from "./telegram";
-import { amsterdamMinuteOfDay } from "./time";
+import { minuteOfDayInTz } from "./time";
 
 const USER = "just@wallage.nl";
 const CHAT = 4242;
@@ -103,8 +104,8 @@ describe("sendDailyDigest", () => {
 });
 
 describe("sendDueDigests", () => {
-  const now = new Date("2026-06-17T06:05:00Z"); // 08:05 Amsterdam
-  const minute = amsterdamMinuteOfDay(now);
+  const now = new Date("2026-06-17T06:05:00Z"); // 08:05 Amsterdam, 02:05 New York
+  const minute = minuteOfDayInTz(now, "Europe/Amsterdam");
 
   function deps(): { deps: Deps; calls: () => number; sent: () => number } {
     const { hn, calls } = countingHn();
@@ -152,6 +153,36 @@ describe("sendDueDigests", () => {
       (r) => r.userEmail,
     );
     expect(new Set(curatedUsers)).toEqual(new Set(["a@x.com", "b@x.com"]));
+  });
+
+  it("matches the slot in the user's timezone, not Amsterdam", async () => {
+    const db = getDb(env);
+    const nyMinute = minuteOfDayInTz(now, "America/New_York");
+    expect(nyMinute).not.toBe(minute);
+    await db
+      .insert(preferences)
+      .values({ userEmail: USER, text: "rust", updatedAt: now });
+
+    // A slot at the Amsterdam minute must not fire for a New York user.
+    await db.insert(telegram).values({
+      userEmail: USER,
+      chatId: CHAT,
+      slot1: minute,
+      timezone: "America/New_York",
+    });
+    const before = deps();
+    await sendDueDigests(db, before.deps, APP, now);
+    expect(before.sent()).toBe(0);
+    expect(await db.select().from(stories)).toHaveLength(0);
+
+    // The same slot at the New York minute fires.
+    await db
+      .update(telegram)
+      .set({ slot1: nyMinute })
+      .where(eq(telegram.userEmail, USER));
+    const after = deps();
+    await sendDueDigests(db, after.deps, APP, now);
+    expect(after.sent()).toBe(1);
   });
 
   it("does nothing when the chat is not linked", async () => {

@@ -11,10 +11,12 @@ import {
   mintLinkCode,
   parseDailyTime,
   saveSlots,
+  saveTimezone,
 } from "./telegram-bot";
 
 const USER = "just@wallage.nl";
 const CHAT = 4242;
+const TZ = "America/New_York";
 
 const message = (text: string, chatId = CHAT) => ({
   message: { chat: { id: chatId }, text },
@@ -70,6 +72,7 @@ describe("dueSlot", () => {
     slot1: 485,
     slot2: null,
     slot3: 1170,
+    timezone: null,
   };
   it("matches a configured slot only", () => {
     expect(dueSlot(row, 485)).toBe(true);
@@ -81,12 +84,14 @@ describe("dueSlot", () => {
 describe("handleTelegramUpdate", () => {
   it("links a chat with a valid /start code and rejects an expired one", async () => {
     const db = getDb(env);
-    const { code } = await mintLinkCode(db, USER, new Date());
+    const { code } = await mintLinkCode(db, USER, TZ, new Date());
 
     const ok = await handleTelegramUpdate(db, message(`/start ${code}`));
     expect(ok?.reply).toContain("Linked");
+    expect(ok?.reply).toContain(TZ);
     const status = await loadTelegramStatus(db, USER);
     expect(status.linked).toBe(true);
+    expect(status.timezone).toBe(TZ);
 
     // Code is single-use: it was cleared on link.
     const reused = await handleTelegramUpdate(
@@ -104,7 +109,7 @@ describe("handleTelegramUpdate", () => {
 
   it("captures the chat label on link and reports the account via /user", async () => {
     const db = getDb(env);
-    const { code } = await mintLinkCode(db, USER, new Date());
+    const { code } = await mintLinkCode(db, USER, TZ, new Date());
     await handleTelegramUpdate(
       db,
       messageFrom(`/start ${code}`, { id: CHAT, username: "just" }),
@@ -118,7 +123,7 @@ describe("handleTelegramUpdate", () => {
 
   it("acks /fetch and flags the feed to run for the linked account", async () => {
     const db = getDb(env);
-    const { code } = await mintLinkCode(db, USER, new Date());
+    const { code } = await mintLinkCode(db, USER, TZ, new Date());
     await handleTelegramUpdate(db, message(`/start ${code}`));
 
     const res = await handleTelegramUpdate(db, message("/fetch"));
@@ -128,7 +133,7 @@ describe("handleTelegramUpdate", () => {
 
   it("answers /help and falls back to help for unknown commands", async () => {
     const db = getDb(env);
-    const { code } = await mintLinkCode(db, USER, new Date());
+    const { code } = await mintLinkCode(db, USER, TZ, new Date());
     await handleTelegramUpdate(db, message(`/start ${code}`));
 
     const help = await handleTelegramUpdate(db, message("/help"));
@@ -141,7 +146,7 @@ describe("handleTelegramUpdate", () => {
 
   it("falls back to the name when the chat has no username", async () => {
     const db = getDb(env);
-    const { code } = await mintLinkCode(db, USER, new Date());
+    const { code } = await mintLinkCode(db, USER, TZ, new Date());
     await handleTelegramUpdate(
       db,
       messageFrom(`/start ${code}`, { id: CHAT, first_name: "Just" }),
@@ -151,7 +156,7 @@ describe("handleTelegramUpdate", () => {
 
   it("sets and reads preferences once linked", async () => {
     const db = getDb(env);
-    const { code } = await mintLinkCode(db, USER, new Date());
+    const { code } = await mintLinkCode(db, USER, TZ, new Date());
     await handleTelegramUpdate(db, message(`/start ${code}`));
 
     const set = await handleTelegramUpdate(
@@ -171,7 +176,7 @@ describe("handleTelegramUpdate", () => {
 
   it("sets, shows and clears a daily-time slot", async () => {
     const db = getDb(env);
-    const { code } = await mintLinkCode(db, USER, new Date());
+    const { code } = await mintLinkCode(db, USER, TZ, new Date());
     await handleTelegramUpdate(db, message(`/start ${code}`));
 
     const set = await handleTelegramUpdate(db, message("/daily_time_2 08:32"));
@@ -191,7 +196,7 @@ describe("handleTelegramUpdate", () => {
 
   it("saves all three slots from the web UI, rounding and clearing", async () => {
     const db = getDb(env);
-    const { code } = await mintLinkCode(db, USER, new Date());
+    const { code } = await mintLinkCode(db, USER, TZ, new Date());
     await handleTelegramUpdate(db, message(`/start ${code}`));
 
     await saveSlots(db, USER, ["08:32", null, "20:00"]);
@@ -211,7 +216,7 @@ describe("handleTelegramUpdate", () => {
 
   it("disconnects a linked chat via /disconnect and returns to unlinked", async () => {
     const db = getDb(env);
-    const { code } = await mintLinkCode(db, USER, new Date());
+    const { code } = await mintLinkCode(db, USER, TZ, new Date());
     await handleTelegramUpdate(db, message(`/start ${code}`));
     await saveSlots(db, USER, ["08:00", null, null]);
     expect((await loadTelegramStatus(db, USER)).linked).toBe(true);
@@ -232,5 +237,16 @@ describe("handleTelegramUpdate", () => {
     const db = getDb(env);
     expect(await handleTelegramUpdate(db, message("hello"))).toBeNull();
     expect(await handleTelegramUpdate(db, {})).toBeNull();
+  });
+});
+
+describe("saveTimezone", () => {
+  it("inserts then updates the timezone for a user without a chat", async () => {
+    const db = getDb(env);
+    await saveTimezone(db, USER, TZ);
+    expect((await loadTelegramStatus(db, USER)).timezone).toBe(TZ);
+
+    await saveTimezone(db, USER, "Asia/Tokyo");
+    expect((await loadTelegramStatus(db, USER)).timezone).toBe("Asia/Tokyo");
   });
 });
