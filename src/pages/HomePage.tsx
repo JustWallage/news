@@ -1,8 +1,20 @@
+import { useEffect, useRef } from "react";
 import { StoryRow } from "@/components/StoryRow";
 import { useFeed } from "@/context/FeedContext";
 
 export function HomePage() {
-  const { data, loading, error, recordOpen } = useFeed();
+  const { data, loading, error, refresh, recordOpen } = useFeed();
+
+  // Visiting the homepage re-curates the feed; the backend rate-limits the
+  // upstream HN fetch to once / 5 min, so this is cheap on repeat visits.
+  const refreshed = useRef(false);
+  useEffect(() => {
+    if (refreshed.current) {
+      return;
+    }
+    refreshed.current = true;
+    refresh();
+  }, [refresh]);
 
   if (error !== null) {
     return <p className="text-sm text-destructive">Could not load stories.</p>;

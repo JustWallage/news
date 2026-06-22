@@ -6,6 +6,8 @@ test("the preferences page reveals a Telegram connect code with a copy button", 
   await page.context().grantPermissions(["clipboard-write"]);
   await page.goto("/preferences");
   await expect(page.getByText(/Connected\./)).toBeHidden();
+  // The daily-time editor is only offered once a chat is linked.
+  await expect(page.getByText("Daily summary times")).toBeHidden();
 
   await page.getByRole("button", { name: "Generate start command" }).click();
 

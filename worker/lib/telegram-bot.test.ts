@@ -10,6 +10,7 @@ import {
   loadTelegramStatus,
   mintLinkCode,
   parseDailyTime,
+  saveSlots,
 } from "./telegram-bot";
 
 const USER = "just@wallage.nl";
@@ -186,6 +187,26 @@ describe("handleTelegramUpdate", () => {
 
     await handleTelegramUpdate(db, message("/daily_time_2 off"));
     expect((await loadTelegramStatus(db, USER)).slots[1]).toBeNull();
+  });
+
+  it("saves all three slots from the web UI, rounding and clearing", async () => {
+    const db = getDb(env);
+    const { code } = await mintLinkCode(db, USER, new Date());
+    await handleTelegramUpdate(db, message(`/start ${code}`));
+
+    await saveSlots(db, USER, ["08:32", null, "20:00"]);
+    expect((await loadTelegramStatus(db, USER)).slots).toEqual([
+      "08:30",
+      null,
+      "20:00",
+    ]);
+
+    await saveSlots(db, USER, [null, null, null]);
+    expect((await loadTelegramStatus(db, USER)).slots).toEqual([
+      null,
+      null,
+      null,
+    ]);
   });
 
   it("ignores non-command and non-message updates", async () => {

@@ -5,9 +5,11 @@
   revalidate); writes go through `apiFetch` from `lib/api.ts`. Everything is
   zod-parsed.
 - HomePage has a **Refresh** button → `POST /api/digest/run` (re-curates the
-  current user's feed on demand), then re-fetches the feed.
+  current user's feed on demand), then re-fetches the feed. HomePage also
+  auto-fires `refresh()` once on mount (a `useRef` guard); the backend
+  rate-limits HN fetches to once / 5min so it's cheap.
 - `AuthGate` shows a "Sign in with Google" screen (→ `/auth/login`) when
-  `/api/health` 401s; `Layout`'s header has a sign-out button → `POST /auth/logout`.
+  `/api/health` 401s; PreferencesPage has a Log out button → `POST /auth/logout`.
 - Opening a story title fires a fire-and-forget `POST /api/stories/:id/open`
   while the browser follows the link (new tab) — best effort, never blocks nav.
 - PreferencesPage seeds the textarea from the server only while it is pristine
@@ -19,7 +21,10 @@
 - PreferencesPage's `TelegramSection` reads `/api/telegram` status (shows the
   connected chat label), POSTs `/api/telegram/link-code` to reveal a
   `/start <code>` connect code, and POSTs `/api/telegram/test` for the Send test
-  message button; daily times themselves are set from the bot, not the web UI.
+  message button. When linked, it also shows three `type="time"` inputs (seeded
+  pristine via a `slotsDirty` ref, same pattern as the prefs textarea) that PUT
+  `/api/telegram/slots`; the editor is hidden until a chat is linked. Times can
+  still be set from the bot too.
 - `components/ui/` is shadcn-generated (Base UI primitives, NOT Radix — pass
   `render={<a />}` plus `nativeButton={false}` for a link-button, not `asChild`).
   It is exempt from lint and knip; regenerate via `pnpm dlx shadcn@latest add`.
