@@ -24,6 +24,25 @@ async function logout(): Promise<void> {
 
 const SLOT_LABELS = ["First", "Second", "Third"];
 
+function TrashIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 6h18" />
+      <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6M14 11v6" />
+    </svg>
+  );
+}
+
 function TelegramSection() {
   const { data, mutate } = useCachedFetch(
     "/api/telegram",
@@ -175,29 +194,50 @@ function TelegramSection() {
           <div className="space-y-2">
             <Label>Daily summary times</Label>
             <p className="text-sm text-muted-foreground">
-              Up to three times a day (Europe/Amsterdam). Leave a slot empty to
-              skip it.
+              Up to three times a day, in your selected timezone. Use the trash
+              button to clear a time.
             </p>
             <div className="flex flex-wrap gap-2">
-              {slots.map((value, i) => (
-                <Input
-                  key={SLOT_LABELS[i]}
-                  type="time"
-                  step={300}
-                  value={value}
-                  aria-label={`${SLOT_LABELS[i]} daily summary time`}
-                  className="w-32"
-                  onChange={(event) => {
-                    slotsDirty.current = true;
-                    setSlots(
-                      slots.map((slot, j) =>
-                        j === i ? event.target.value : slot,
-                      ),
-                    );
-                    setSlotStatus("idle");
-                  }}
-                />
-              ))}
+              {slots.map((value, i) => {
+                const name = `${SLOT_LABELS[i] ?? `Slot ${i + 1}`} daily summary time`;
+                return (
+                  <div key={name} className="flex items-center gap-1">
+                    <Input
+                      type="time"
+                      step={300}
+                      value={value}
+                      aria-label={name}
+                      className="w-32"
+                      onChange={(event) => {
+                        slotsDirty.current = true;
+                        setSlots(
+                          slots.map((slot, j) =>
+                            j === i ? event.target.value : slot,
+                          ),
+                        );
+                        setSlotStatus("idle");
+                      }}
+                    />
+                    {value !== "" && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Clear ${name}`}
+                        onClick={() => {
+                          slotsDirty.current = true;
+                          setSlots(
+                            slots.map((slot, j) => (j === i ? "" : slot)),
+                          );
+                          setSlotStatus("idle");
+                        }}
+                      >
+                        <TrashIcon />
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             <div className="flex items-center gap-3">
               <Button onClick={saveSlots} disabled={slotStatus === "saving"}>

@@ -39,9 +39,11 @@ accurate IANA zone (e.g. `"America/New_York"`).
 
 - The removed 06:20 web digest (handled on another branch — ignore here; its
   `runScheduledDigest` / `amsterdamHour` path stays untouched).
-- Multi-user iteration of the Telegram cron: `runTelegramDigests` still serves
-  only the owner (`ALLOWED_EMAILS[0]`). This change makes _that owner's_
-  schedule timezone-aware; fanning out to many users is a separate concern.
+- Multi-user iteration of the Telegram cron was out of scope **as originally
+  written** (the branch was based on the old single-owner `runTelegramDigests`).
+  After merging `main`, the cron is the multi-user `sendDueDigests`, and this
+  change makes its per-row due check timezone-aware — so every linked user gets
+  their summary in their own timezone, not just the owner.
 - DST gap/overlap edge cases for slots (spring-forward skip / fall-back double).
 
 ## Current behaviour (verified files)

@@ -91,6 +91,38 @@ test("disconnects Telegram from the preferences page after confirming", async ({
   ).toBeHidden();
 });
 
+test("clears a saved daily summary time with the trash button", async ({
+  page,
+  request,
+}) => {
+  await linkChat(request);
+  await page.goto("/preferences");
+
+  const first = page.getByLabel("First daily summary time", { exact: true });
+  const save = page.getByRole("button", { name: "Save times" });
+  const slotsSaved = (): Promise<unknown> =>
+    page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/telegram/slots") &&
+        r.request().method() === "PUT",
+    );
+
+  await first.fill("08:00");
+  await Promise.all([slotsSaved(), save.click()]);
+
+  // The trash button is the only way to clear a set time.
+  await page
+    .getByRole("button", { name: "Clear First daily summary time" })
+    .click();
+  await expect(first).toHaveValue("");
+  await Promise.all([slotsSaved(), save.click()]);
+
+  await page.reload();
+  await expect(
+    page.getByLabel("First daily summary time", { exact: true }),
+  ).toHaveValue("");
+});
+
 test("the /disconnect bot command unlinks the chat", async ({ request }) => {
   const { chatId } = await linkChat(request);
 
