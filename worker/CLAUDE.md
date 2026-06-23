@@ -9,6 +9,8 @@
 | `ENVIRONMENT`                                   | var     | `local` / `e2e` / `production`; unknown values fail closed for auth (production); deps are real unless e2e                                                                                                                                                                                                                                                                   |
 | `DEV_USER_EMAIL`, `TEST_AUTH_TOKEN`             | secrets | `.dev.vars` locally; per-run secret on e2e workers                                                                                                                                                                                                                                                                                                                           |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`      | secrets | prod-only; OPTIONAL on `Env` (declared in `env.ts`). The Google OAuth client for the in-app sign-in flow. `makeGoogleAuth` uses the real seam in production (fail-closed 503 if absent), the fake in local/e2e — gated on ENVIRONMENT, NOT presence                                                                                                                          |
+| `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`    | secrets | prod-only; OPTIONAL on `Env` (declared in `env.ts`); installed by the deploy workflow like the Telegram creds. Cloudflare Turnstile bot-gate on `/auth/login`. `verifyTurnstile` SKIPS in local/e2e (ENVIRONMENT gate) and is a no-op when the secret is absent (fail OPEN — feature simply off). The site key (public) is served to the SPA by `GET /auth/config`           |
+| `DIGEST_COOLDOWN_SECONDS`                       | var     | committed (0 local/e2e, 600 prod); widened to `number` in `env.ts`. Per-user cooldown on `POST /api/digest/run` (0 disables it, so the hermetic suite can run repeatedly)                                                                                                                                                                                                    |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` | secrets | prod-only; OPTIONAL on `Env` (declared in `env.ts`). Token presence flips `createDeps` to the real Telegram client; the webhook secret gates `/telegram/webhook` (fail closed). The e2e env sets a FIXED `TELEGRAM_WEBHOOK_SECRET` var (`e2e-webhook-secret`) so the hermetic suite can drive the webhook (link/disconnect) — telegram stays the no-op fake there (no token) |
 | `APP_URL`, `TELEGRAM_BOT_USERNAME`              | vars    | summary footer link; bot `@username` (no `@`) for `t.me` deep links — empty → link-code `url` is null. `TELEGRAM_BOT_USERNAME` is widened to `string` in `env.ts` (committed `""`, real in prod)                                                                                                                                                                             |
 
@@ -24,14 +26,34 @@ independently of hn/ai**: real iff `TELEGRAM_BOT_TOKEN` is set, else the no-op
 `createDeps` directly. Every handler and `runDigest` are environment-agnostic —
 no `ENVIRONMENT`/`isTest` checks leak into logic, and there is no test-only route.
 
-## Auth (`middleware/auth.ts`, `routes/auth.ts`, `lib/session.ts`, `lib/oauth.ts`)
+## Security headers & CSRF (`index.ts`, `middleware/csrf.ts`, `public/_headers`)
+
+- `index.ts` mounts `hono/secureHeaders` (HSTS, `X-Frame-Options: DENY`, nosniff,
+  referrer policy, a lean `default-src 'none'` CSP) on EVERY worker response. The
+  SPA document + static assets are served by the assets handler (they never hit
+  the worker), so THEIR full CSP/frame-ancestors live in **`public/_headers`**
+  (which allows `challenges.cloudflare.com` for the Turnstile widget). Edit the
+  CSP there, not here, when the frontend gains an external origin.
+- `middleware/csrf.ts` `originGuard` runs on every request: for non-safe methods
+  it 403s when the `Origin` header is present AND differs from the worker's own
+  origin. A MISSING Origin is allowed (same-origin/non-browser), so the Telegram
+  webhook and the unit/e2e harness are unaffected. Defence-in-depth atop the
+  SameSite=Lax session cookie.
+
+## Auth (`middleware/auth.ts`, `routes/auth.ts`, `lib/session.ts`, `lib/oauth.ts`, `lib/turnstile.ts`)
 
 - Auth is in the Worker — there is NO Cloudflare Access. `routes/auth.ts` mounts
-  `/auth/{login,callback,logout}` **outside `/api`** (you must reach them without a
-  session) — `/auth/*` is in `assets.run_worker_first`. Login uses `arctic` to run
-  Google OAuth (state + PKCE verifier in short-lived signed cookies); the callback
-  requires `email_verified`, then `createSession` mints an opaque token whose
+  `/auth/{config,login,callback,logout}` **outside `/api`** (you must reach them
+  without a session) — `/auth/*` is in `assets.run_worker_first`. Login uses
+  `arctic` to run Google OAuth (state + PKCE verifier in short-lived signed
+  cookies); the callback requires `email_verified` (and 400s on a token-exchange
+  failure rather than 500ing), then `createSession` mints an opaque token whose
   SHA-256 hash is the `sessions` row id and sets it as the `session` cookie.
+- `/auth/login` is bot-gated by Cloudflare Turnstile (`lib/turnstile.ts`): the
+  widget posts its token as the `cf-turnstile-response` query param, verified via
+  siteverify. Skipped in local/e2e (ENVIRONMENT gate, like the OAuth fake) and a
+  no-op when unconfigured. `GET /auth/config` tells the SPA whether to render the
+  widget (`turnstileSiteKey` null → plain sign-in button).
 - `middleware/auth.ts` is THE only identity resolver: production reads the
   `session` cookie → `lookupSession`; e2e uses `X-Test-User-Email` + `X-Test-Auth`;
   local uses `DEV_USER_EMAIL`. Unknown ENVIRONMENT fails closed like production.
@@ -113,7 +135,10 @@ prefVersion, userEmail, now)` then, per user, reuses curations
   Identity comes ONLY from `c.get("userEmail")` (set by `middleware/auth.ts`);
   routes never read auth headers/cookies.
 - `POST /api/digest/run` (homepage Refresh + e2e) runs the digest for the current
-  user via `c.var.deps` — no environment gate.
+  user via `c.var.deps` — no environment gate. It IS rate-limited per user via
+  `lib/rate-limit.ts` (the `digest_runs` table) by `DIGEST_COOLDOWN_SECONDS`
+  (0 = off in local/e2e); a request inside the window 429s with `Retry-After` and
+  does NOT run the AI. The cron and Telegram `/fetch` paths are NOT rate-limited.
 - `index.ts` `scheduled` has ONE cron, `*/5 * * * *` → `runTelegramDigests` →
   `sendDueDigests`: load the `telegram` rows whose `chatId` is set and at least
   one slot is configured, then keep those whose slot matches the current minute
@@ -122,7 +147,12 @@ prefVersion, userEmail, now)` then, per user, reuses curations
   WITHOUT touching HN; otherwise `fetchFrontPage` ONCE and `curateForUser` + send
   to every due user in parallel (`Promise.all`). A linked chat with a configured
   slot is the only opt-in to a scheduled digest; there is no longer a separate
-  web-digest cron.
+  web-digest cron. The same `*/5` handler also runs `runScheduledMaintenance`
+  (`lib/maintenance.ts`) — on the 03:00 UTC tick only — to purge expired sessions
+  and clear expired link codes (telegram rows survive; only the stale code fields
+  are cleared).
+- Logs never write the user email (PII): `lib/digest.ts` logs a short
+  `user#<hash>` tag (`sha256Hex` prefix) instead.
 - Responses are built through `shared/api.ts` schema `.parse(...)` in
   `lib/serialize.ts` (the no-casts pattern).
 

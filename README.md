@@ -51,6 +51,16 @@ manage the app from chat: `/set_preferences`, `/cur_preferences`, and up to thre
 `/daily_time HH:MM` slots. Each slot re-runs the digest and pushes the fresh
 picks to the chat. Setup is in [docs/BOOTSTRAP.md](docs/BOOTSTRAP.md).
 
+## Security
+
+Built to be opened to the public. Sessions are opaque random tokens stored only
+as their SHA-256 hash; sign-in is Google OAuth (PKCE + state, `email_verified`
+enforced) gated by Cloudflare Turnstile against bots. The on-demand feed refresh
+is rate-limited per user to bound Workers AI cost. Responses carry a strict CSP
+(`public/_headers`) plus HSTS, `X-Frame-Options`, nosniff and a referrer policy,
+and state-changing requests are Origin-checked on top of the SameSite cookie. See
+the audit in [docs/reports/](docs/reports/).
+
 ## Setup & deploy
 
 One-time cloud setup is in [docs/BOOTSTRAP.md](docs/BOOTSTRAP.md). Pushing to

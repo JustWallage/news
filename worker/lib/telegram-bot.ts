@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { telegram, type TelegramRow } from "../../db/schema";
-import type { TelegramStatus } from "../../shared/api";
+import { PREFERENCES_MAX_LENGTH, type TelegramStatus } from "../../shared/api";
 import botCommands from "./bot-commands.json";
 import type { Db } from "./db";
 import { loadPreferences, savePreferences } from "./digest";
@@ -95,8 +95,11 @@ export function dueSlot(row: TelegramRow, minute: number): boolean {
   return [row.slot1, row.slot2, row.slot3].some((slot) => slot === minute);
 }
 
+// 8 random bytes (16 hex chars, 64 bits): guessing a pending code within its
+// 15-min window would link an attacker's chat to a victim's account, so the
+// keyspace is kept large rather than relying only on Telegram's send rate limit.
 function generateLinkCode(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(4));
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
   return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
@@ -231,6 +234,9 @@ async function setPreferences(
 ): Promise<string> {
   if (text === "") {
     return "Add the text after the command: /set_preferences <your interests>";
+  }
+  if (text.length > PREFERENCES_MAX_LENGTH) {
+    return `Preferences are too long (max ${PREFERENCES_MAX_LENGTH} characters).`;
   }
   await savePreferences(db, userEmail, text);
   return "✅ Preferences updated.";

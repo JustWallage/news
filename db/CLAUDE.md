@@ -32,5 +32,9 @@ Rules:
   (`chatId` + `chatUsername`/`chatName` captured at `/start`), the pending
   one-time `linkCode`/`linkCodeExpiresAt`, and three nullable slot columns
   (daily-summary minute-of-day 0–1439; null = unset).
+- `sessions` (PK = SHA-256 of the cookie token) and `digest_runs` (PK
+  `userEmail`, `lastRunAt`) are auth/rate-limit state. `digest_runs` backs the
+  per-user cooldown on `POST /api/digest/run`. Expired sessions + link codes are
+  purged nightly by the cron (`worker/lib/maintenance.ts`).
 - Timestamps are epoch integers via `{ mode: "timestamp" }` (surface as `Date`);
   `current`/`relevant` are `{ mode: "boolean" }` integers.

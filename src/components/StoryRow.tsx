@@ -1,5 +1,5 @@
 import type { Story } from "@shared/api";
-import { hnItemUrl, hostname, relativeTime } from "@/lib/format";
+import { hnItemUrl, hostname, relativeTime, safeHref } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export function StoryRow({
@@ -11,8 +11,9 @@ export function StoryRow({
   rank: number;
   onOpen: (id: number) => void;
 }) {
-  const target = story.url ?? hnItemUrl(story.id);
-  const domain = hostname(story.url);
+  const href = safeHref(story.url);
+  const target = href ?? hnItemUrl(story.id);
+  const domain = hostname(href);
   return (
     <li className="flex gap-2 py-1.5 text-sm">
       <span className="w-6 shrink-0 text-right text-muted-foreground">

@@ -81,6 +81,25 @@ describe("/auth/callback", () => {
     expect(res.status).toBe(403);
     expect(await getDb(env).select().from(sessions)).toHaveLength(0);
   });
+
+  it("returns 400 (not 500) when the token exchange throws", async () => {
+    const { cookies, state } = await login();
+    const res = await app.request(
+      `/auth/callback?code=boom&state=${state}`,
+      { headers: { cookie: cookies } },
+      env,
+    );
+    expect(res.status).toBe(400);
+    expect(await getDb(env).select().from(sessions)).toHaveLength(0);
+  });
+});
+
+describe("/auth/config", () => {
+  it("reports no Turnstile site key when unconfigured (e2e)", async () => {
+    const res = await app.request("/auth/config", {}, env);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ turnstileSiteKey: null });
+  });
 });
 
 describe("/auth/logout", () => {

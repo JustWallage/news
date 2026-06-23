@@ -44,6 +44,13 @@ jobs:
         run: |
           sed -i "s/TEMPLATE_E2E_DB_ID/$DB_ID/" wrangler.jsonc
           sed -i "s/\"database_name\": \"news-e2e\"/\"database_name\": \"$E2E_NAME\"/" wrangler.jsonc
+          # The ephemeral worker is internet-reachable, so don't ship the
+          # committed webhook secret. Mint a per-run one, bake it into the config,
+          # and hand the same value to the test step (see BASE_URL step below).
+          WEBHOOK_SECRET=$(openssl rand -hex 32)
+          echo "::add-mask::$WEBHOOK_SECRET"
+          echo "E2E_WEBHOOK_SECRET=$WEBHOOK_SECRET" >> "$GITHUB_ENV"
+          sed -i "s/e2e-webhook-secret/$WEBHOOK_SECRET/" wrangler.jsonc
 
       - name: Apply migrations to the ephemeral D1
         run: pnpm exec wrangler d1 migrations apply DB --remote --env e2e
@@ -67,6 +74,9 @@ jobs:
       - name: Run E2E suite against the ephemeral deployment
         env:
           BASE_URL: https://${{ env.E2E_NAME }}.${{ secrets.WORKERS_DEV_SUBDOMAIN }}
+          # The per-run webhook secret minted above, so the telegram spec can
+          # drive the bot webhook against this deployment.
+          E2E_WEBHOOK_SECRET: ${{ env.E2E_WEBHOOK_SECRET }}
         run: pnpm test:e2e
 
       - name: Upload Playwright report

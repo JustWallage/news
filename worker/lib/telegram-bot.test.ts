@@ -174,6 +174,21 @@ describe("handleTelegramUpdate", () => {
     expect(cur?.reply).toBe("rust and self-hosting");
   });
 
+  it("rejects an over-long /set_preferences without saving", async () => {
+    const db = getDb(env);
+    const { code } = await mintLinkCode(db, USER, TZ, new Date());
+    await handleTelegramUpdate(db, message(`/start ${code}`));
+
+    const tooLong = `/set_preferences ${"a".repeat(1001)}`;
+    const res = await handleTelegramUpdate(db, message(tooLong));
+    expect(res?.reply).toContain("too long");
+    const stored = await db
+      .select()
+      .from(preferences)
+      .where(eq(preferences.userEmail, USER));
+    expect(stored).toHaveLength(0);
+  });
+
   it("sets, shows and clears a daily-time slot", async () => {
     const db = getDb(env);
     const { code } = await mintLinkCode(db, USER, TZ, new Date());

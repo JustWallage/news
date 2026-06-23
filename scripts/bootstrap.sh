@@ -17,11 +17,13 @@ REQUIRED_KEYS=(
   WORKERS_DEV_SUBDOMAIN
 )
 
-# Pushed only when present — the Telegram bot is optional. deploy.yml puts these
-# onto the production worker as secrets.
+# Pushed only when present — the Telegram bot and the Turnstile sign-in bot-gate
+# are both optional. deploy.yml puts these onto the production worker as secrets.
 OPTIONAL_KEYS=(
   TELEGRAM_BOT_TOKEN
   TELEGRAM_WEBHOOK_SECRET
+  TURNSTILE_SITE_KEY
+  TURNSTILE_SECRET_KEY
 )
 
 say() { printf '\033[1;32m[bootstrap]\033[0m %s\n' "$*"; }

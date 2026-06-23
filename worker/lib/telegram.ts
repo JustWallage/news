@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Story } from "../../shared/api";
+import { isHttpUrl, type Story } from "../../shared/api";
 
 // The external dependency seam for sending Telegram messages (the Bot API in
 // production, a no-op fake elsewhere — see lib/deps.ts).
@@ -49,11 +49,15 @@ export type TelegramUpdate = z.infer<typeof updateSchema>;
 
 const MAX_STORIES = 15;
 
+// Escapes the five chars that matter in Telegram HTML mode, including the double
+// quote so an attacker-influenced URL can't break out of an href="" attribute.
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function itemLink(id: number): string {
@@ -64,8 +68,12 @@ function userLink(by: string): string {
   return `https://news.ycombinator.com/user?id=${encodeURIComponent(by)}`;
 }
 
+// Only an http(s) story URL is used as the link target; anything else falls back
+// to the HN item page (defence-in-depth — story rows are cleaned at ingestion).
 function storyLink(story: Story): string {
-  return story.url ?? itemLink(story.id);
+  return story.url !== null && isHttpUrl(story.url)
+    ? story.url
+    : itemLink(story.id);
 }
 
 function plural(n: number, word: string): string {
@@ -75,7 +83,7 @@ function plural(n: number, word: string): string {
 // Two lines per story: the clickable title, then a metadata line with the score
 // and links to the poster's HN profile and the HN comments page.
 function formatStory(s: Story): string {
-  const title = `<a href="${storyLink(s)}">${escapeHtml(s.title)}</a>`;
+  const title = `<a href="${escapeHtml(storyLink(s))}">${escapeHtml(s.title)}</a>`;
   const meta = [
     plural(s.score, "point"),
     `by <a href="${userLink(s.by)}">${escapeHtml(s.by)}</a>`,

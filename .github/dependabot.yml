@@ -1,0 +1,19 @@
+version: 2
+updates:
+  # npm/pnpm dependencies — surfaces vulnerable + outdated packages as PRs.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      # One PR per week for routine version bumps; security updates still come
+      # through immediately as their own PRs.
+      all-dependencies:
+        patterns:
+          - "*"
+  # Keep the GitHub Actions used by the pipeline patched too.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly

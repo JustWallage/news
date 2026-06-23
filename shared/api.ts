@@ -4,12 +4,34 @@ import { z } from "zod";
 
 export const meSchema = z.object({ email: z.string() });
 
+// Public client config served by GET /auth/config. `turnstileSiteKey` is null
+// when Cloudflare Turnstile is not configured (local/e2e), so the sign-in screen
+// renders the plain button instead of the challenge widget.
+export const authConfigSchema = z.object({
+  turnstileSiteKey: z.string().nullable(),
+});
+
 export const healthSchema = z.object({
   ok: z.literal(true),
   email: z.string(),
 });
 
 export const okSchema = z.object({ ok: z.literal(true) });
+
+// ---- URLs ----
+
+// http(s) are the only schemes we ever render as a clickable link. Story URLs
+// come from an upstream (Algolia/HN), so this is enforced at ingestion and again
+// at each render sink (SPA anchor, Telegram href) rather than trusting the source
+// — a `javascript:`/`data:` URL must never reach an href.
+export function isHttpUrl(value: string): boolean {
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
 
 // ---- Stories ----
 
@@ -44,8 +66,12 @@ export const preferencesSchema = z.object({
   updatedAt: z.iso.datetime().nullable(),
 });
 
+// A plain-text interests blob is short by nature; cap it so neither the web PUT
+// nor the Telegram /set_preferences path can store an unbounded payload.
+export const PREFERENCES_MAX_LENGTH = 1000;
+
 export const preferencesUpdateSchema = z.object({
-  text: z.string().max(10000),
+  text: z.string().max(PREFERENCES_MAX_LENGTH),
 });
 
 // ---- Digest ----

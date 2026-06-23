@@ -43,16 +43,19 @@ function makeRealGoogleAuth(
 }
 
 // Deterministic stand-in for local + e2e, where there are no Google credentials.
-// The sentinel code "unverified" yields an unverified claim so the callback's
-// reject path is exercisable; any other code yields a verified owner.
+// Sentinel codes make the callback's branches exercisable: "unverified" yields an
+// unverified claim, "boom" rejects (the token-exchange failure path); any other
+// code yields a verified owner.
 const fakeGoogleAuth: GoogleAuth = {
   createAuthUrl: (state) =>
     `https://accounts.google.test/authorize?state=${state}`,
   verifyCode: (code) =>
-    Promise.resolve({
-      email: "just@wallage.nl",
-      emailVerified: code !== "unverified",
-    }),
+    code === "boom"
+      ? Promise.reject(new Error("token exchange failed"))
+      : Promise.resolve({
+          email: "just@wallage.nl",
+          emailVerified: code !== "unverified",
+        }),
 };
 
 // Security-critical: the fake is used ONLY in local/e2e. Production (and any

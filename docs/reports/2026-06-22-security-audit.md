@@ -49,6 +49,32 @@ front of the expensive Workers AI curation path or account creation.
 
 ---
 
+## 1a. Remediation status (resolved 2026-06-23)
+
+All twelve findings were remediated on branch `claude/upbeat-ritchie-s11oah`.
+Summary of what shipped:
+
+| #   | Status   | Fix                                                                                                                                                               |
+| --- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | ✅ Fixed | Per-user 10-min cooldown on `POST /api/digest/run` (`DIGEST_COOLDOWN_SECONDS`, `digest_runs` table → 429 + `Retry-After`) **and** Cloudflare Turnstile on sign-in |
+| 2   | ✅ Fixed | `public/_headers` CSP (incl. Turnstile origin) + HSTS/XFO/nosniff/Referrer/Permissions; `hono/secureHeaders` on the worker                                        |
+| 3   | ✅ Fixed | `isHttpUrl` scheme guard at HN ingestion, the SPA `safeHref`, and the Telegram href (now escaped, incl. `"`)                                                      |
+| 4   | ✅ Fixed | Link code widened to 8 random bytes (64 bits)                                                                                                                     |
+| 5   | ✅ Fixed | `originGuard` middleware: cross-site Origin on unsafe methods → 403 (absent Origin allowed)                                                                       |
+| 6   | ✅ Fixed | `iac/CLAUDE.md` rewritten — no Access perimeter, public OAuth model, Turnstile noted                                                                              |
+| 7   | ✅ Fixed | Nightly (03:00 UTC) cron purge of expired sessions + link codes (`lib/maintenance.ts`)                                                                            |
+| 8   | ✅ Fixed | try/catch around the token exchange → 400 instead of 500                                                                                                          |
+| 9   | ✅ Fixed | `.github/dependabot.yml` (npm + github-actions, weekly)                                                                                                           |
+| 10  | ✅ Fixed | Digest logs use a `user#<hash>` tag instead of the raw email                                                                                                      |
+| 11  | ✅ Fixed | Per-run e2e webhook secret (sed-templated in CI); committed value kept for local/hermetic only                                                                    |
+| 12  | ✅ Fixed | Preferences capped at `PREFERENCES_MAX_LENGTH` (1000) on both the web schema and the Telegram path                                                                |
+
+Operational follow-ups still owned by the deployer (not code): set the
+`TURNSTILE_*` GitHub secrets to activate the bot-gate, and configure a Workers AI
+spend alert/cap in the Cloudflare dashboard as a cost backstop.
+
+---
+
 ## 2. Architecture & trust boundaries
 
 A single Cloudflare Worker serves both the static SPA and the Hono API.
