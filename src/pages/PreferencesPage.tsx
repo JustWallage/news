@@ -241,28 +241,32 @@ function TelegramSection() {
                 {pending ? "Generating…" : "Generate connect link"}
               </Button>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {code.url !== null && (
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     <a
                       href={code.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className={buttonVariants({ size: "lg" })}
+                      className={cn(
+                        buttonVariants({ size: "lg" }),
+                        "h-11 w-full text-base",
+                      )}
                     >
                       Link my account
                     </a>
                     <p className="text-muted-foreground">
-                      Opens Telegram and links your account automatically.
+                      Opens Telegram and links your account automatically —
+                      that's all you need.
                     </p>
                   </div>
                 )}
 
-                <div className="space-y-2 rounded-lg border bg-muted/30 p-4">
-                  <p className="text-muted-foreground">
+                <div className="space-y-2 border-t pt-3">
+                  <p className="text-sm text-muted-foreground">
                     {code.url !== null
-                      ? "Or send this to the bot yourself:"
-                      : "Send this to the bot to connect:"}
+                      ? "Prefer to do it by hand? Send this command to the bot instead:"
+                      : "Send this command to the bot to connect:"}
                   </p>
                   <div className="flex flex-wrap items-center gap-2">
                     <code className="rounded bg-muted px-2 py-1 text-sm">
@@ -272,19 +276,18 @@ function TelegramSection() {
                       {copied ? "Copied" : "Copy"}
                     </Button>
                   </div>
-                  <p className="text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     This code expires in 15 minutes.
                   </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={connect}
+                    disabled={pending}
+                  >
+                    {pending ? "Generating…" : "Generate a new link"}
+                  </Button>
                 </div>
-
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={connect}
-                  disabled={pending}
-                >
-                  {pending ? "Generating…" : "Generate a new link"}
-                </Button>
               </div>
             )}
           </CardContent>

@@ -166,3 +166,19 @@ button, signed-in email, and `Log out` button.
 
 API/worker/schema/DB changes; new dependencies; any change to curation, cron, or
 telegram backend behavior.
+
+## Addendum — make the connect button the clear primary action
+
+Follow-up after review: the "Link my account" button was missing in `pnpm dev` because
+the link-code `url` is null whenever `TELEGRAM_BOT_USERNAME` is empty
+(`worker/routes/telegram.ts`), and the local/dev default was `""` — so only the command
+showed. Production (`JustlyNewsBot`) rendered the button correctly.
+
+- **Config:** set the local/dev `TELEGRAM_BOT_USERNAME` to `JustlyNewsBot` so the deep
+  link is generated in `pnpm dev`. The `e2e` env stays `""` — this both preserves the
+  `"" | "JustlyNewsBot"` union the `username === ""` guard relies on and keeps the
+  null-url unit/e2e coverage. (No worker logic change.)
+- **Hierarchy:** the "Link my account" button becomes the dominant primary action
+  (full-width, larger) with a one-line "that's all you need" helper; the `/start`
+  command drops below a divider, clearly framed as a manual backup ("Prefer to do it by
+  hand?"), with the regenerate affordance tucked into that backup block.
