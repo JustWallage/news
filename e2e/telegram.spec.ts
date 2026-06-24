@@ -39,7 +39,7 @@ test("the preferences page reveals a Telegram connect code with a copy button", 
 }) => {
   await page.context().grantPermissions(["clipboard-write"]);
   await page.goto("/preferences");
-  await expect(page.getByText(/Connected\./)).toBeHidden();
+  await expect(page.getByText(/Connected to Telegram/)).toBeHidden();
   // The daily-summaries card is only offered once a chat is linked.
   await expect(page.getByText("Daily summaries")).toBeHidden();
 
@@ -78,18 +78,25 @@ test("the timezone selector persists the chosen zone", async ({
 test("disconnects Telegram from the preferences page after confirming", async ({
   page,
   request,
+  userEmail,
 }) => {
   const { label } = await linkChat(request);
 
   await page.goto("/preferences");
-  await expect(page.getByText(`Connected as ${label}.`)).toBeVisible();
+  await expect(
+    page.getByText(`Connected to Telegram as ${label}.`),
+  ).toBeVisible();
+  // The connected card names both the Telegram account and the linked email.
+  await expect(
+    page.getByText(`Summaries for ${userEmail} are delivered to this chat.`),
+  ).toBeVisible();
   await expect(page.getByText("Daily summaries")).toBeVisible();
 
   await page.getByRole("button", { name: "Disconnect", exact: true }).click();
   await expect(page.getByText("Disconnect Telegram?")).toBeVisible();
   await page.getByRole("button", { name: "Yes, disconnect" }).click();
 
-  await expect(page.getByText(/Connected as/)).toBeHidden();
+  await expect(page.getByText(/Connected to Telegram/)).toBeHidden();
   await expect(page.getByText("Daily summary times")).toBeHidden();
   await expect(
     page.getByRole("button", { name: "Disconnect", exact: true }),

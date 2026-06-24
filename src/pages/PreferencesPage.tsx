@@ -184,9 +184,9 @@ function TelegramSection() {
       });
   };
 
+  const email = useUser();
   const linked = data?.linked === true;
   const label = data?.chatLabel ?? null;
-  const who = label === null ? "Connected." : `Connected as ${label}.`;
 
   return (
     <>
@@ -200,8 +200,20 @@ function TelegramSection() {
 
         {linked ? (
           <>
-            <CardContent>
-              <p className="text-muted-foreground">{who}</p>
+            <CardContent className="space-y-1">
+              <p>
+                Connected to Telegram
+                {label !== null && (
+                  <>
+                    {" as "}
+                    <span className="font-medium">{label}</span>
+                  </>
+                )}
+                .
+              </p>
+              <p className="text-muted-foreground">
+                Summaries for {email} are delivered to this chat.
+              </p>
             </CardContent>
             <CardFooter className="gap-3">
               <Button
