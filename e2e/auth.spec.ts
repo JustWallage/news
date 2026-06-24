@@ -11,6 +11,9 @@ test("an unauthenticated visitor sees the landing page with sign-in", async ({
   ).toBeVisible();
   await expect(page.getByText(/Describe what you want to read/i)).toBeVisible();
   await expect(
+    page.getByRole("heading", { name: /Delivered to Telegram/i }),
+  ).toBeVisible();
+  await expect(
     page.getByRole("button", { name: /Sign in with Google/i }),
   ).toBeVisible();
 });

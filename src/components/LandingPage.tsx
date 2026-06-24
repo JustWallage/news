@@ -143,9 +143,11 @@ const steps = [
   },
   {
     title: "Get your front page",
-    body: "AI reads the Hacker News front page and keeps only what matches — on demand and every morning, with an optional Telegram digest.",
+    body: "AI reads the Hacker News front page and keeps only what matches — on demand and every morning.",
   },
 ];
+
+const telegramCommands = ["/daily_time 08:30", "/fetch", "/set_preferences"];
 
 export function LandingPage() {
   return (
@@ -182,6 +184,29 @@ export function LandingPage() {
               </li>
             ))}
           </ol>
+        </section>
+
+        <section className="border-t border-border py-14">
+          <h2 className="font-semibold">
+            Delivered to Telegram, on your schedule
+          </h2>
+          <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+            Link a Telegram chat and the bot sends your picks automatically — up
+            to three times a day, at the times and timezone you choose. It
+            re-reads the front page for each delivery, so every message is
+            fresh. Set your interests, change your slots, or pull a digest on
+            demand, all from chat.
+          </p>
+          <ul className="mt-5 flex flex-wrap gap-2">
+            {telegramCommands.map((command) => (
+              <li
+                key={command}
+                className="rounded-md border border-border bg-muted px-2 py-1 font-mono text-xs text-muted-foreground"
+              >
+                {command}
+              </li>
+            ))}
+          </ul>
         </section>
       </main>
 
