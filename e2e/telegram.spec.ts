@@ -41,11 +41,11 @@ test("the preferences page reveals a Telegram connect code with a copy button", 
 }) => {
   await page.context().grantPermissions(["clipboard-write"]);
   await page.goto("/preferences");
-  await expect(page.getByText(/Connected\./)).toBeHidden();
-  // The daily-time editor is only offered once a chat is linked.
-  await expect(page.getByText("Daily summary times")).toBeHidden();
+  await expect(page.getByText(/Connected to Telegram/)).toBeHidden();
+  // The daily-summaries card is only offered once a chat is linked.
+  await expect(page.getByText("Daily summaries")).toBeHidden();
 
-  await page.getByRole("button", { name: "Generate start command" }).click();
+  await page.getByRole("button", { name: "Generate connect link" }).click();
 
   await expect(page.getByText(/\/start [0-9a-f]{16}/)).toBeVisible();
   await expect(page.getByText(/expires in 15 minutes/)).toBeVisible();
@@ -56,7 +56,12 @@ test("the preferences page reveals a Telegram connect code with a copy button", 
   await expect(page.getByRole("button", { name: "Copied" })).toBeVisible();
 });
 
-test("the timezone selector persists the chosen zone", async ({ page }) => {
+test("the timezone selector persists the chosen zone", async ({
+  page,
+  request,
+}) => {
+  // The timezone selector lives in the daily-summaries card, shown once linked.
+  await linkChat(request);
   await page.goto("/preferences");
   const select = page.getByLabel("Timezone");
   await Promise.all([
@@ -75,18 +80,25 @@ test("the timezone selector persists the chosen zone", async ({ page }) => {
 test("disconnects Telegram from the preferences page after confirming", async ({
   page,
   request,
+  userEmail,
 }) => {
   const { label } = await linkChat(request);
 
   await page.goto("/preferences");
-  await expect(page.getByText(`Connected as ${label}.`)).toBeVisible();
-  await expect(page.getByText("Daily summary times")).toBeVisible();
+  await expect(
+    page.getByText(`Connected to Telegram as ${label}.`),
+  ).toBeVisible();
+  // The connected card names both the Telegram account and the linked email.
+  await expect(
+    page.getByText(`Summaries for ${userEmail} are delivered to this chat.`),
+  ).toBeVisible();
+  await expect(page.getByText("Daily summaries")).toBeVisible();
 
   await page.getByRole("button", { name: "Disconnect", exact: true }).click();
   await expect(page.getByText("Disconnect Telegram?")).toBeVisible();
   await page.getByRole("button", { name: "Yes, disconnect" }).click();
 
-  await expect(page.getByText(/Connected as/)).toBeHidden();
+  await expect(page.getByText(/Connected to Telegram/)).toBeHidden();
   await expect(page.getByText("Daily summary times")).toBeHidden();
   await expect(
     page.getByRole("button", { name: "Disconnect", exact: true }),
@@ -123,6 +135,35 @@ test("clears a saved daily summary time with the trash button", async ({
   await expect(
     page.getByLabel("First daily summary time", { exact: true }),
   ).toHaveValue("");
+});
+
+test("an empty daily summary slot reads as Not set", async ({
+  page,
+  request,
+}) => {
+  await linkChat(request);
+  await page.goto("/preferences");
+
+  const first = page.getByLabel("First daily summary time", { exact: true });
+  const firstRow = page.locator("div", { has: first }).last();
+  await expect(firstRow.getByText("Not set")).toBeVisible();
+
+  const save = page.getByRole("button", { name: "Save times" });
+  await first.fill("08:00");
+  await Promise.all([
+    page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/telegram/slots") &&
+        r.request().method() === "PUT",
+    ),
+    save.click(),
+  ]);
+
+  // A set slot offers the clear button instead of the "Not set" cue.
+  await expect(firstRow.getByText("Not set")).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: "Clear First daily summary time" }),
+  ).toBeVisible();
 });
 
 test("the /disconnect bot command unlinks the chat", async ({ request }) => {

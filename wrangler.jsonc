@@ -19,11 +19,13 @@
   "ai": { "binding": "AI" },
   "vars": {
     "ENVIRONMENT": "local",
-    // APP_URL is the OAuth redirect base + the Telegram summary footer link;
-    // TELEGRAM_BOT_USERNAME builds the t.me deep link (empty → the link-code
-    // endpoint returns url: null).
+    // APP_URL is the OAuth redirect base + the Telegram summary footer link.
+    // TELEGRAM_BOT_USERNAME builds the t.me deep link behind the "Link my
+    // account" button; local points at the real bot so the connect flow works
+    // in `pnpm dev`. The e2e env keeps it empty to exercise the url: null
+    // fallback (empty → the link-code endpoint returns url: null).
     "APP_URL": "http://localhost:5173",
-    "TELEGRAM_BOT_USERNAME": "",
+    "TELEGRAM_BOT_USERNAME": "JustlyNewsBot",
     // Per-user cooldown (seconds) on POST /api/digest/run; 0 disables it so local
     // + e2e can run the digest repeatedly. Production sets a real window.
     "DIGEST_COOLDOWN_SECONDS": 0,
