@@ -34,6 +34,9 @@ no `ENVIRONMENT`/`isTest` checks leak into logic, and there is no test-only rout
   the worker), so THEIR full CSP/frame-ancestors live in **`public/_headers`**
   (which allows `challenges.cloudflare.com` for the Turnstile widget). Edit the
   CSP there, not here, when the frontend gains an external origin.
+- `index.ts` also stamps `Cache-Control: private, no-store` on EVERY worker
+  response (api/auth/telegram all carry per-user or auth data); the assets
+  handler keeps its own long-lived caching since it never hits the worker.
 - `middleware/csrf.ts` `originGuard` runs on every request: for non-safe methods
   it 403s when the `Origin` header is present AND differs from the worker's own
   origin. A MISSING Origin is allowed (same-origin/non-browser), so the Telegram
@@ -48,7 +51,10 @@ no `ENVIRONMENT`/`isTest` checks leak into logic, and there is no test-only rout
   `arctic` to run Google OAuth (state + PKCE verifier in short-lived signed
   cookies); the callback requires `email_verified` (and 400s on a token-exchange
   failure rather than 500ing), then `createSession` mints an opaque token whose
-  SHA-256 hash is the `sessions` row id and sets it as the `session` cookie.
+  SHA-256 hash is the `sessions` row id and sets it as the session cookie. The
+  session + OAuth-flow cookies use the `__Host-` name prefix (host-only, Secure,
+  Path=/), so every set AND delete must pass `secure: true` + `path: "/"` and no
+  Domain or Hono throws on serialize.
 - `/auth/login` is bot-gated by Cloudflare Turnstile (`lib/turnstile.ts`): the
   widget posts its token as the `cf-turnstile-response` query param, verified via
   siteverify. Skipped in local/e2e (ENVIRONMENT gate, like the OAuth fake) and a
@@ -74,6 +80,9 @@ no `ENVIRONMENT`/`isTest` checks leak into logic, and there is no test-only rout
   is resolved by `chatId`; linking consumes a one-time `linkCode` minted by
   `POST /api/telegram/link-code` (15-min expiry) and captures the chat
   username/name for `chatLabel` (Telegram does not expose phone numbers to bots).
+  A `/start` from a chat already linked to a DIFFERENT account is refused (the
+  `chatId` unique index would otherwise throw → webhook 500), not reassigned;
+  re-linking the same account to its own chat is fine.
   `POST /api/telegram/test` sends a test message via `c.var.deps.telegram`.
   `/fetch` acks immediately, then the webhook runs `sendDailyDigest` in
   `c.executionCtx.waitUntil` (the digest takes seconds — don't block the ack).
