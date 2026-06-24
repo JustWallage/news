@@ -5,6 +5,8 @@ Trunk-based pipeline; reusable jobs via `workflow_call`.
 - Push to `main` → deploy.yml: check-and-build → terraform apply →
   ephemeral-e2e → deploy-prod (concurrency group `deploy-prod`, gated on green
   E2E). Put `-skip-e2e` in the commit title to skip the E2E stage.
+- deploy.yml is skipped entirely (`paths-ignore: docs/**`) when a push touches
+  only `docs/`. A push mixing docs + any other path still deploys.
 - Feature branches run nothing unless the commit title contains `run-pipeline`
   → branch-pipeline.yml (checks + ephemeral E2E, no deploy).
 - Ephemeral E2E deploys worker + D1 named `news-e2e-<run_id>`
