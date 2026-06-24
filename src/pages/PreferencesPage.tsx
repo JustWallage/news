@@ -9,11 +9,20 @@ import { useEffect, useRef, useState } from "react";
 import { useUser } from "@/components/AuthGate";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCachedFetch } from "@/hooks/useCachedFetch";
 import { apiFetch, jsonInit } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 const TIMEZONES = Intl.supportedValuesOf("timeZone");
 
@@ -175,94 +184,223 @@ function TelegramSection() {
       });
   };
 
+  const email = useUser();
   const linked = data?.linked === true;
   const label = data?.chatLabel ?? null;
-  const who = label === null ? "Connected." : `Connected as ${label}.`;
 
   return (
-    <div className="space-y-4 border-t pt-5">
-      <div className="space-y-1">
-        <Label>Telegram</Label>
-        <p className="text-sm text-muted-foreground">
-          Get your daily news summaries in Telegram.
-        </p>
-      </div>
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Telegram</CardTitle>
+          <CardDescription>
+            Get your daily news summaries in Telegram.
+          </CardDescription>
+        </CardHeader>
+
+        {linked ? (
+          <>
+            <CardContent className="space-y-1">
+              <p>
+                Connected to Telegram
+                {label !== null && (
+                  <>
+                    {" as "}
+                    <span className="font-medium">{label}</span>
+                  </>
+                )}
+                .
+              </p>
+              <p className="text-muted-foreground">
+                Summaries for {email} are delivered to this chat.
+              </p>
+            </CardContent>
+            <CardFooter className="gap-3">
+              <Button
+                variant="outline"
+                onClick={sendTest}
+                disabled={test === "sending"}
+              >
+                {test === "sending" ? "Sending…" : "Send test message"}
+              </Button>
+              {test === "sent" && (
+                <span className="text-muted-foreground">Sent.</span>
+              )}
+              {test === "error" && (
+                <span className="text-destructive">Could not send.</span>
+              )}
+              <Button
+                variant="destructive"
+                className="ml-auto"
+                onClick={() => {
+                  setConfirmDisconnect(true);
+                }}
+                disabled={disconnecting}
+              >
+                {disconnecting ? "Disconnecting…" : "Disconnect"}
+              </Button>
+            </CardFooter>
+          </>
+        ) : (
+          <CardContent className="space-y-3">
+            <p className="text-muted-foreground">
+              Generate a connect link, open it, and your account links
+              automatically.
+            </p>
+
+            {code === null ? (
+              <Button onClick={connect} disabled={pending}>
+                {pending ? "Generating…" : "Generate connect link"}
+              </Button>
+            ) : (
+              <div className="space-y-4">
+                {code.url !== null && (
+                  <div className="space-y-1.5">
+                    <a
+                      href={code.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={cn(
+                        buttonVariants({ size: "lg" }),
+                        "h-11 w-full text-base",
+                      )}
+                    >
+                      Link my account
+                    </a>
+                    <p className="text-muted-foreground">
+                      Opens Telegram and links your account automatically —
+                      that's all you need.
+                    </p>
+                  </div>
+                )}
+
+                <div className="space-y-2 border-t pt-3">
+                  <p className="text-sm text-muted-foreground">
+                    {code.url !== null
+                      ? "Prefer to do it by hand? Send this command to the bot instead:"
+                      : "Send this command to the bot to connect:"}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <code className="rounded bg-muted px-2 py-1 text-sm">
+                      /start {code.code}
+                    </code>
+                    <Button variant="outline" size="sm" onClick={copy}>
+                      {copied ? "Copied" : "Copy"}
+                    </Button>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    This code expires in 15 minutes.
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={connect}
+                    disabled={pending}
+                  >
+                    {pending ? "Generating…" : "Generate a new link"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        )}
+      </Card>
 
       {linked && (
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">{who}</p>
-          <div className="space-y-2">
-            <Label>Daily summary times</Label>
-            <p className="text-sm text-muted-foreground">
-              Up to three times a day, in your selected timezone. Use the trash
-              button to clear a time.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {slots.map((value, i) => {
-                const name = `${SLOT_LABELS[i] ?? `Slot ${i + 1}`} daily summary time`;
-                return (
-                  <div key={name} className="flex items-center gap-1">
-                    <Input
-                      type="time"
-                      step={300}
-                      value={value}
-                      aria-label={name}
-                      className="w-32"
-                      onChange={(event) => {
-                        slotsDirty.current = true;
-                        setSlots(
-                          slots.map((slot, j) =>
-                            j === i ? event.target.value : slot,
-                          ),
-                        );
-                        setSlotStatus("idle");
-                      }}
-                    />
-                    {value !== "" && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Clear ${name}`}
-                        onClick={() => {
+        <Card>
+          <CardHeader>
+            <CardTitle>Daily summaries</CardTitle>
+            <CardDescription>
+              Up to three times a day, in your timezone.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="timezone">Timezone</Label>
+              <select
+                id="timezone"
+                value={timezone}
+                onChange={(event) => {
+                  changeTimezone(event.target.value);
+                }}
+                className="flex h-9 w-full max-w-xs rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                {TIMEZONES.map((tz) => (
+                  <option key={tz} value={tz}>
+                    {tz}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Times</Label>
+              <div className="space-y-2">
+                {slots.map((value, i) => {
+                  const slotLabel = SLOT_LABELS[i] ?? `Slot ${i + 1}`;
+                  const name = `${slotLabel} daily summary time`;
+                  const isSet = value !== "";
+                  return (
+                    <div key={name} className="flex items-center gap-3">
+                      <span className="w-16 text-muted-foreground">
+                        {slotLabel}
+                      </span>
+                      <Input
+                        type="time"
+                        step={300}
+                        value={value}
+                        aria-label={name}
+                        className={cn(
+                          "w-32",
+                          !isSet && "bg-muted/40 text-muted-foreground",
+                        )}
+                        onChange={(event) => {
                           slotsDirty.current = true;
                           setSlots(
-                            slots.map((slot, j) => (j === i ? "" : slot)),
+                            slots.map((slot, j) =>
+                              j === i ? event.target.value : slot,
+                            ),
                           );
                           setSlotStatus("idle");
                         }}
-                      >
-                        <TrashIcon />
-                      </Button>
-                    )}
-                  </div>
-                );
-              })}
+                      />
+                      {isSet ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Clear ${name}`}
+                          onClick={() => {
+                            slotsDirty.current = true;
+                            setSlots(
+                              slots.map((slot, j) => (j === i ? "" : slot)),
+                            );
+                            setSlotStatus("idle");
+                          }}
+                        >
+                          <TrashIcon />
+                        </Button>
+                      ) : (
+                        <span className="text-muted-foreground">Not set</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              <Button onClick={saveSlots} disabled={slotStatus === "saving"}>
-                {slotStatus === "saving" ? "Saving…" : "Save times"}
-              </Button>
-              {slotStatus === "saved" && (
-                <span className="text-sm text-muted-foreground">Saved.</span>
-              )}
-              {slotStatus === "error" && (
-                <span className="text-sm text-destructive">
-                  Could not save.
-                </span>
-              )}
-            </div>
-          </div>
-          <Button
-            variant="destructive"
-            onClick={() => {
-              setConfirmDisconnect(true);
-            }}
-            disabled={disconnecting}
-          >
-            {disconnecting ? "Disconnecting…" : "Disconnect"}
-          </Button>
-        </div>
+          </CardContent>
+          <CardFooter className="gap-3">
+            <Button onClick={saveSlots} disabled={slotStatus === "saving"}>
+              {slotStatus === "saving" ? "Saving…" : "Save times"}
+            </Button>
+            {slotStatus === "saved" && (
+              <span className="text-muted-foreground">Saved.</span>
+            )}
+            {slotStatus === "error" && (
+              <span className="text-destructive">Could not save.</span>
+            )}
+          </CardFooter>
+        </Card>
       )}
 
       <ConfirmDialog
@@ -273,85 +411,7 @@ function TelegramSection() {
         confirmLabel="Yes, disconnect"
         onConfirm={disconnect}
       />
-
-      <div className="space-y-1">
-        <Label htmlFor="timezone">Timezone</Label>
-        <p className="text-sm text-muted-foreground">
-          Your daily summaries are scheduled in this timezone.
-        </p>
-        <select
-          id="timezone"
-          value={timezone}
-          onChange={(event) => {
-            changeTimezone(event.target.value);
-          }}
-          className="flex h-9 w-full max-w-xs rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-        >
-          {TIMEZONES.map((tz) => (
-            <option key={tz} value={tz}>
-              {tz}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
-        <li>Generate your start command below.</li>
-        <li>Copy it and open the bot.</li>
-        <li>Send the command to the bot to connect.</li>
-      </ol>
-
-      <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={connect} disabled={pending}>
-          {pending
-            ? "Generating…"
-            : code === null
-              ? "Generate start command"
-              : "Regenerate"}
-        </Button>
-        {linked && (
-          <Button
-            variant="outline"
-            onClick={sendTest}
-            disabled={test === "sending"}
-          >
-            {test === "sending" ? "Sending…" : "Send test message"}
-          </Button>
-        )}
-        {test === "sent" && (
-          <span className="text-sm text-muted-foreground">Sent.</span>
-        )}
-        {test === "error" && (
-          <span className="text-sm text-destructive">Could not send.</span>
-        )}
-      </div>
-
-      {code !== null && (
-        <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <code className="rounded bg-muted px-2 py-1 text-sm">
-              /start {code.code}
-            </code>
-            <Button variant="outline" size="sm" onClick={copy}>
-              {copied ? "Copied" : "Copy"}
-            </Button>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Send this to the bot to connect. This code expires in 15 minutes.
-          </p>
-          {code.url !== null && (
-            <a
-              href={code.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={buttonVariants({ size: "lg" })}
-            >
-              Open the bot
-            </a>
-          )}
-        </div>
-      )}
-    </div>
+    </>
   );
 }
 
@@ -388,7 +448,7 @@ export function PreferencesPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <span className="text-sm text-muted-foreground">{email}</span>
         <Button
@@ -402,36 +462,40 @@ export function PreferencesPage() {
         </Button>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="preferences">Your interests</Label>
-        <p className="text-sm text-muted-foreground">
-          Describe what you want to read in plain text. The morning filter uses
-          this to pick stories.
-        </p>
-        <Textarea
-          id="preferences"
-          value={text}
-          onChange={(event) => {
-            dirty.current = true;
-            setText(event.target.value);
-            setStatus("idle");
-          }}
-          rows={16}
-          placeholder="e.g. Rust and systems programming, self-hosting, indie startups, LLM tooling. Not interested in crypto or politics."
-        />
-      </div>
-
-      <div className="flex items-center gap-3">
-        <Button onClick={save} disabled={status === "saving"}>
-          {status === "saving" ? "Saving…" : "Save"}
-        </Button>
-        {status === "saved" && (
-          <span className="text-sm text-muted-foreground">Saved.</span>
-        )}
-        {status === "error" && (
-          <span className="text-sm text-destructive">Could not save.</span>
-        )}
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Your interests</CardTitle>
+          <CardDescription>
+            Describe what you want to read in plain text. The morning filter
+            uses this to pick stories.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Textarea
+            id="preferences"
+            aria-label="Your interests"
+            value={text}
+            onChange={(event) => {
+              dirty.current = true;
+              setText(event.target.value);
+              setStatus("idle");
+            }}
+            rows={14}
+            placeholder="e.g. Rust and systems programming, self-hosting, indie startups, LLM tooling. Not interested in crypto or politics."
+          />
+        </CardContent>
+        <CardFooter className="gap-3">
+          <Button onClick={save} disabled={status === "saving"}>
+            {status === "saving" ? "Saving…" : "Save"}
+          </Button>
+          {status === "saved" && (
+            <span className="text-muted-foreground">Saved.</span>
+          )}
+          {status === "error" && (
+            <span className="text-destructive">Could not save.</span>
+          )}
+        </CardFooter>
+      </Card>
 
       <TelegramSection />
     </div>
