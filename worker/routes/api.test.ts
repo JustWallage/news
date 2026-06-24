@@ -34,6 +34,11 @@ describe("api", () => {
     expect(await res.json()).toEqual({ ok: true, email: EMAIL });
   });
 
+  it("marks worker responses uncacheable", async () => {
+    const res = await app.request("/api/health", get, env);
+    expect(res.headers.get("Cache-Control")).toBe("private, no-store");
+  });
+
   it("starts with an empty feed", async () => {
     const res = await app.request("/api/stories", get, env);
     expect(await res.json()).toEqual({ stories: [] });

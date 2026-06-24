@@ -13,8 +13,8 @@ import {
 } from "../lib/session";
 import { verifyTurnstile } from "../lib/turnstile";
 
-const STATE_COOKIE = "oauth_state";
-const VERIFIER_COOKIE = "oauth_verifier";
+const STATE_COOKIE = "__Host-oauth_state";
+const VERIFIER_COOKIE = "__Host-oauth_verifier";
 const OAUTH_FLOW_TTL_S = 600;
 
 const flowCookie = {
@@ -69,8 +69,8 @@ authRoutes.get("/callback", async (c) => {
   const state = c.req.query("state");
   const storedState = getCookie(c, STATE_COOKIE);
   const codeVerifier = getCookie(c, VERIFIER_COOKIE);
-  deleteCookie(c, STATE_COOKIE);
-  deleteCookie(c, VERIFIER_COOKIE);
+  deleteCookie(c, STATE_COOKIE, { path: "/", secure: true });
+  deleteCookie(c, VERIFIER_COOKIE, { path: "/", secure: true });
   if (
     code === undefined ||
     state === undefined ||
@@ -109,6 +109,6 @@ authRoutes.post("/logout", async (c) => {
   if (token !== undefined) {
     await deleteSession(getDb(c.env), token);
   }
-  deleteCookie(c, SESSION_COOKIE, { path: "/" });
+  deleteCookie(c, SESSION_COOKIE, { path: "/", secure: true });
   return c.json(okSchema.parse({ ok: true }));
 });

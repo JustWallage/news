@@ -166,6 +166,39 @@ test("an empty daily summary slot reads as Not set", async ({
   ).toBeVisible();
 });
 
+test("refuses to link a chat already bound to another account (no 500)", async ({
+  request,
+}) => {
+  const authToken = process.env.TEST_AUTH_TOKEN ?? "local-test-token";
+  const userB = `e2e-${crypto.randomUUID()}@news.test`;
+  const bHeaders = { "X-Test-User-Email": userB, "X-Test-Auth": authToken };
+
+  // The test's default identity (user A) links a chat.
+  const { chatId } = await linkChat(request);
+
+  // User B mints a fresh code; the SAME chat tries to use it.
+  const mintedB = telegramLinkCodeSchema.parse(
+    await (
+      await request.post("/api/telegram/link-code", {
+        headers: bHeaders,
+        data: { timezone: "America/New_York" },
+      })
+    ).json(),
+  );
+  const res = await request.post("/telegram/webhook", {
+    headers: { "X-Telegram-Bot-Api-Secret-Token": WEBHOOK_SECRET },
+    data: { message: { chat: { id: chatId }, text: `/start ${mintedB.code}` } },
+  });
+
+  // The webhook acks gracefully rather than 500ing on the chat_id conflict, and
+  // user B is left unlinked.
+  expect(res.status()).toBe(200);
+  const statusB = telegramStatusSchema.parse(
+    await (await request.get("/api/telegram", { headers: bHeaders })).json(),
+  );
+  expect(statusB.linked).toBe(false);
+});
+
 test("the /disconnect bot command unlinks the chat", async ({ request }) => {
   const { chatId } = await linkChat(request);
 

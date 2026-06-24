@@ -212,6 +212,16 @@ async function handleStart(
   ) {
     return "That code is invalid or expired. Generate a fresh one in the app.";
   }
+  // chatId is unique: binding a chat already linked to a DIFFERENT account would
+  // violate the index and throw (→ webhook 500 → Telegram retries). Refuse with a
+  // clear message instead. Re-linking the SAME account to its own chat is fine.
+  const existing = await loadByChat(db, chat.id);
+  if (existing !== null && existing.userEmail !== row.userEmail) {
+    return (
+      "This Telegram chat is already linked to another account. " +
+      "Send /disconnect here first, then use a fresh code."
+    );
+  }
   await db
     .update(telegram)
     .set({

@@ -3,7 +3,11 @@ import { sessions } from "../../db/schema";
 import { sha256Hex } from "./crypto";
 import type { Db } from "./db";
 
-export const SESSION_COOKIE = "session";
+// `__Host-` prefix: the browser then guarantees the cookie is host-only (no
+// Domain), Secure, and Path=/ — so a sibling/parent host can never set or
+// overwrite it. Requires Secure + Path=/ + no Domain on every set AND delete
+// (Hono throws otherwise), which the auth routes satisfy.
+export const SESSION_COOKIE = "__Host-session";
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 function generateToken(): string {

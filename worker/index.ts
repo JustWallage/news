@@ -31,6 +31,14 @@ app.use(
     },
   }),
 );
+// Every worker response carries per-user or auth data (feeds, identity, OAuth
+// redirects with Set-Cookie) and must never be stored by a shared or browser
+// cache. The static SPA assets are served by the assets handler (they never
+// reach the worker), so their own long-lived caching is unaffected.
+app.use("*", async (c, next) => {
+  await next();
+  c.header("Cache-Control", "private, no-store");
+});
 // CSRF defence-in-depth (Origin check) on every state-changing request.
 app.use("*", originGuard);
 
