@@ -26,6 +26,7 @@ pnpm install
 cp .dev.vars.example .dev.vars   # local identity + test token
 pnpm dev                         # http://localhost:5173
 pnpm check                       # format, lint, types, knip, jscpd, terraform, unit tests
+pnpm test:e2e:setup              # once: node deps + Chromium binary (no apt/sudo)
 pnpm test:e2e                    # Playwright
 ```
 

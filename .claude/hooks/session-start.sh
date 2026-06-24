@@ -12,12 +12,10 @@ echo '{"async": true, "asyncTimeout": 600000}'
 
 cd "$CLAUDE_PROJECT_DIR"
 
-# Node deps (cached after first run).
-pnpm install
-
-# Playwright's Chromium binary for e2e tests. Requires `cdn.playwright.dev`
-# in the environment's network egress allowlist, otherwise this 403s.
-pnpm exec playwright install chromium
+# Node deps + Playwright's Chromium binary for e2e (the `test:e2e:setup` backbone;
+# NB no `--with-deps`, so it never touches apt). The Chromium download needs
+# `cdn.playwright.dev` in the environment's network egress allowlist, else it 403s.
+pnpm run test:e2e:setup
 
 # Terraform: `pnpm check` runs `check:tf`, so the pre-commit gate needs it on
 # PATH. Downloads from releases.hashicorp.com (must be egress-allowlisted).
