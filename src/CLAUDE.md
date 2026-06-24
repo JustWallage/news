@@ -9,11 +9,12 @@
   auto-fires `refresh()` once on mount (a `useRef` guard); the backend
   rate-limits HN fetches to once / 5min so it's cheap. While `refreshing`
   spinner above posts.
-- `AuthGate` shows a "Sign in with Google" screen when `/api/health` 401s. It
-  reads `GET /auth/config`: when `turnstileSiteKey` is set it renders the
-  Cloudflare Turnstile widget and the sign-in button passes the token to
-  `/auth/login?cf-turnstile-response=…`; when null (local/e2e) it falls back to a
-  plain button → `/auth/login`. PreferencesPage has a Log out button →
+- `AuthGate` renders `LandingPage` (the unauthenticated explainer + sign-in CTA)
+  when `/api/health` 401s; authenticated `/` is the feed. The sign-in CTA lives
+  in `LandingPage` and reads `GET /auth/config`: when `turnstileSiteKey` is set it
+  renders the Cloudflare Turnstile widget and the sign-in button passes the token
+  to `/auth/login?cf-turnstile-response=…`; when null (local/e2e) it falls back to
+  a plain button → `/auth/login`. PreferencesPage has a Log out button →
   `POST /auth/logout`.
 - `StoryRow` links go through `safeHref` (`lib/format.ts`): only http(s) story
   URLs are used as the anchor target, else it falls back to the HN item page —
