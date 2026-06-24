@@ -2,9 +2,11 @@ import type { APIRequestContext } from "@playwright/test";
 import { telegramLinkCodeSchema, telegramStatusSchema } from "@shared/api";
 import { expect, test } from "./fixtures";
 
-// The fixed e2e webhook secret (wrangler.jsonc e2e env). Lets the hermetic suite
-// drive the bot webhook to link/unlink a chat without a real Telegram round-trip.
-const WEBHOOK_SECRET = "e2e-webhook-secret";
+// The e2e webhook secret: the committed default for the local/hermetic run, or
+// the per-run value minted by CI for the internet-reachable ephemeral worker
+// (see ephemeral-e2e.yml). Lets the suite drive the bot webhook to link/unlink a
+// chat without a real Telegram round-trip.
+const WEBHOOK_SECRET = process.env.E2E_WEBHOOK_SECRET ?? "e2e-webhook-secret";
 
 // Links a chat to the test user the way production does: mint a code, then send
 // the bot a `/start <code>` via the webhook. Returns the chat id (unique per
@@ -45,7 +47,7 @@ test("the preferences page reveals a Telegram connect code with a copy button", 
 
   await page.getByRole("button", { name: "Generate connect link" }).click();
 
-  await expect(page.getByText(/\/start [0-9a-f]{8}/)).toBeVisible();
+  await expect(page.getByText(/\/start [0-9a-f]{16}/)).toBeVisible();
   await expect(page.getByText(/expires in 15 minutes/)).toBeVisible();
 
   const copy = page.getByRole("button", { name: "Copy" });

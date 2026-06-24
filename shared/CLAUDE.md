@@ -10,7 +10,11 @@ boundary. Change the schema here FIRST; both sides follow via `z.infer`.
   `telegramStatusSchema` (linked + `chatLabel` + 3 `HH:MM`|null slots),
   `telegramSlotsUpdateSchema` (the `PUT /api/telegram/slots` body — 3 `HH:MM`|null
   slots) and `telegramLinkCodeSchema` (code + `t.me` url + expiry) back the
-  `/api/telegram` routes.
+  `/api/telegram` routes. `authConfigSchema` backs `GET /auth/config` (the SPA
+  reads `turnstileSiteKey`). `preferencesUpdateSchema` caps text at the shared
+  `PREFERENCES_MAX_LENGTH` (1000) — the same cap the Telegram path enforces.
+  `isHttpUrl` is the shared scheme guard both render sinks (SPA anchor, Telegram
+  href) and HN ingestion use so a non-http(s) URL never reaches an href.
 
 No imports from worker/ or src/ — this folder must stay dependency-free
 (zod only) since both tsconfig projects include it.

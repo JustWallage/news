@@ -19,9 +19,18 @@ import type { Deps } from "./lib/deps";
 // GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET are production-only secrets (the Worker
 // runs the Google OAuth flow). Optional here for the same reason as the Telegram
 // secrets: local/e2e use the fake OAuth seam, so their absence is expected there.
+// DIGEST_COOLDOWN_SECONDS is a committed var (0 in local/e2e, 600 in prod);
+// cf-typegen narrows it to that literal union, so it is widened to number here.
+// TURNSTILE_SITE_KEY + TURNSTILE_SECRET_KEY are production-only secrets installed
+// by the deploy workflow (like the Telegram bot creds): optional here, and their
+// joint absence simply leaves the Turnstile bot-gate off (local/e2e bypass it via
+// the ENVIRONMENT gate in `verifyTurnstile`).
 export type Bindings = Omit<
   Env,
-  "ENVIRONMENT" | "TELEGRAM_BOT_USERNAME" | "TELEGRAM_WEBHOOK_SECRET"
+  | "ENVIRONMENT"
+  | "TELEGRAM_BOT_USERNAME"
+  | "TELEGRAM_WEBHOOK_SECRET"
+  | "DIGEST_COOLDOWN_SECONDS"
 > & {
   ENVIRONMENT: string;
   TELEGRAM_BOT_USERNAME: string;
@@ -29,6 +38,9 @@ export type Bindings = Omit<
   TELEGRAM_WEBHOOK_SECRET?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  DIGEST_COOLDOWN_SECONDS: number;
+  TURNSTILE_SITE_KEY?: string;
+  TURNSTILE_SECRET_KEY?: string;
 };
 
 export interface AppEnv {

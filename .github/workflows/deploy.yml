@@ -139,6 +139,24 @@ jobs:
               | pnpm exec wrangler secret put GOOGLE_CLIENT_SECRET -c dist/news/wrangler.json
           fi
 
+      # Push the Cloudflare Turnstile credentials onto the just-deployed worker.
+      # Both are optional — when unset the sign-in bot-gate stays off (the sign-in
+      # screen renders the plain button and the worker skips verification). The
+      # site key is public but installed as a secret to avoid committing it.
+      - name: Set Turnstile worker secrets
+        env:
+          TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
+        run: |
+          if [ -n "$TURNSTILE_SITE_KEY" ]; then
+            printf '%s' "$TURNSTILE_SITE_KEY" \
+              | pnpm exec wrangler secret put TURNSTILE_SITE_KEY -c dist/news/wrangler.json
+          fi
+          if [ -n "$TURNSTILE_SECRET_KEY" ]; then
+            printf '%s' "$TURNSTILE_SECRET_KEY" \
+              | pnpm exec wrangler secret put TURNSTILE_SECRET_KEY -c dist/news/wrangler.json
+          fi
+
       # Register the bot's slash-command list so Telegram shows autocomplete.
       # Same token guard as above; the list is the single source of truth shared
       # with the worker (worker/lib/bot-commands.json).

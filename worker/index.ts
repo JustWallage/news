@@ -1,9 +1,12 @@
 import { Hono } from "hono";
+import { secureHeaders } from "hono/secure-headers";
 import { meSchema } from "../shared/api";
 import type { AppEnv } from "./env";
 import { createDeps } from "./lib/deps";
+import { runScheduledMaintenance } from "./lib/maintenance";
 import { runTelegramDigests } from "./lib/scheduled";
 import { authMiddleware } from "./middleware/auth";
+import { originGuard } from "./middleware/csrf";
 import { authRoutes } from "./routes/auth";
 import { digestRoutes } from "./routes/digest";
 import { preferencesRoutes } from "./routes/preferences";
@@ -12,6 +15,24 @@ import { telegramRoutes } from "./routes/telegram";
 import { telegramWebhookRoutes } from "./routes/telegram-webhook";
 
 export const app = new Hono<AppEnv>();
+
+// Hardening headers on every worker response (the SPA document + static assets
+// carry the full CSP via public/_headers, since they are served by the assets
+// handler and never reach the worker). HSTS is asserted here too.
+app.use(
+  "*",
+  secureHeaders({
+    strictTransportSecurity: "max-age=63072000; includeSubDomains; preload",
+    xFrameOptions: "DENY",
+    referrerPolicy: "strict-origin-when-cross-origin",
+    contentSecurityPolicy: {
+      defaultSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+    },
+  }),
+);
+// CSRF defence-in-depth (Origin check) on every state-changing request.
+app.use("*", originGuard);
 
 app.use("/api/*", authMiddleware);
 // Root dependency injection: every /api handler reads its HN + AI deps from
@@ -42,6 +63,12 @@ app.route("/telegram", telegramWebhookRoutes);
 export default {
   fetch: app.fetch,
   scheduled: (controller, env, ctx) => {
-    ctx.waitUntil(runTelegramDigests(env, new Date(controller.scheduledTime)));
+    const now = new Date(controller.scheduledTime);
+    ctx.waitUntil(
+      Promise.all([
+        runTelegramDigests(env, now),
+        runScheduledMaintenance(env, now),
+      ]),
+    );
   },
 } satisfies ExportedHandler<Env>;

@@ -126,3 +126,24 @@ bot when they are unset).
 The bot's slash-command list (the `/`-autocomplete the Telegram client shows) is
 registered automatically on every deploy from `worker/lib/bot-commands.json` — no
 manual `setMyCommands` step.
+
+## 9. Cloudflare Turnstile (optional, recommended for a public app)
+
+Turnstile is a bot-gate on the Google sign-in flow. Its two values are **GitHub
+Actions secrets**; the deploy pipeline installs them onto the worker on every
+deploy (and the gate stays off when they are unset — the sign-in screen shows the
+plain button and the worker skips verification).
+
+1. Cloudflare dashboard → Turnstile → Add widget. Hostname: `news.justwallage.nl`
+   (add `localhost` only if you want to exercise it in `pnpm dev`). Copy the
+   **site key** (public) and **secret key**.
+2. Set both as repo secrets (add to `.bootstrap.env` and re-run
+   `./scripts/bootstrap.sh`, or set directly):
+
+   ```sh
+   gh secret set TURNSTILE_SITE_KEY
+   gh secret set TURNSTILE_SECRET_KEY
+   ```
+
+   The next push to `main` deploys and installs them. The widget then renders on
+   the sign-in screen and `/auth/login` requires a valid token.

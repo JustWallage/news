@@ -5,8 +5,15 @@ import {
   stories,
   type StoryRow,
 } from "../../db/schema";
+import { sha256Hex } from "./crypto";
 import type { Db } from "./db";
 import type { HnClient } from "./hn";
+
+// A short, non-reversible tag for logs — correlatable per user across lines
+// without writing the email (PII) into observability output.
+async function userTag(userEmail: string): Promise<string> {
+  return `user#${(await sha256Hex(userEmail)).slice(0, 8)}`;
+}
 
 // Plain shape of a story — returned by the HN client and scored by the AI filter.
 export interface StoryInput {
@@ -202,9 +209,10 @@ export async function curateForUser(
   now: Date,
 ): Promise<DigestResult> {
   const trimmedPrefs = prefsText.trim();
+  const tag = await userTag(userEmail);
 
   console.log(
-    `[digest] user=${userEmail} candidates=${candidates.length} prefs=${
+    `[digest] ${tag} candidates=${candidates.length} prefs=${
       trimmedPrefs === "" ? "(empty)" : `${trimmedPrefs.length} chars`
     }`,
   );
@@ -277,7 +285,7 @@ export async function curateForUser(
     );
   }
   const relevantCount = evaluated.filter((e) => e.relevant).length;
-  console.log(`[digest] relevant=${relevantCount} for user=${userEmail}`);
+  console.log(`[digest] relevant=${relevantCount} for ${tag}`);
 
   // Recompute this user's feed: drop everyone out, then upsert every evaluated
   // candidate, marking current = relevant. Stories not on the current front page

@@ -1,5 +1,14 @@
 // Display helpers for the Hacker-News-style story list.
 
+import { isHttpUrl } from "@shared/api";
+
+// Only render http(s) story URLs as links; anything else (a `javascript:` URL
+// slipping through ingestion) becomes null so the caller falls back to the HN
+// item page. Defence-in-depth: React does not block dangerous href schemes.
+export function safeHref(url: string | null): string | null {
+  return url !== null && isHttpUrl(url) ? url : null;
+}
+
 export function hostname(url: string | null): string | null {
   if (url === null) {
     return null;

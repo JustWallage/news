@@ -30,6 +30,7 @@
     "fix": "prettier --write . && eslint . --fix",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:setup": "pnpm install && playwright install chromium",
     "playwright:install": "playwright install --with-deps chromium",
     "prepare": "husky",
     "worktree": "bash scripts/worktree.sh",

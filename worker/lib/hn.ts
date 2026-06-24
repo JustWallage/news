@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isHttpUrl } from "../../shared/api";
 import type { StoryInput } from "./digest";
 
 // Algolia's Hacker News API returns the whole front page WITH content in a
@@ -49,11 +50,14 @@ export const realHnClient: HnClient = {
       if (!Number.isInteger(id)) {
         return [];
       }
+      // Trust nothing from upstream as an href: keep only http(s) URLs, else
+      // treat it as a self-post (link falls back to the HN item page).
+      const url = hit.url != null && isHttpUrl(hit.url) ? hit.url : null;
       return [
         {
           id,
           title: hit.title,
-          url: hit.url ?? null,
+          url,
           by: hit.author,
           score: hit.points ?? 0,
           comments: hit.num_comments ?? 0,

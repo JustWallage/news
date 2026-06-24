@@ -39,6 +39,40 @@ describe("api", () => {
     expect(await res.json()).toEqual({ stories: [] });
   });
 
+  it("rejects a state-changing request from a cross-site Origin", async () => {
+    const res = await app.request(
+      "/api/preferences",
+      {
+        method: "PUT",
+        headers: {
+          ...authHeaders,
+          "Content-Type": "application/json",
+          Origin: "https://evil.example",
+        },
+        body: JSON.stringify({ text: "rust" }),
+      },
+      env,
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("allows a state-changing request from the same Origin", async () => {
+    const res = await app.request(
+      "/api/preferences",
+      {
+        method: "PUT",
+        headers: {
+          ...authHeaders,
+          "Content-Type": "application/json",
+          Origin: "http://localhost",
+        },
+        body: JSON.stringify({ text: "rust" }),
+      },
+      env,
+    );
+    expect(res.status).toBe(200);
+  });
+
   it("round-trips preferences", async () => {
     const put = await app.request(
       "/api/preferences",
@@ -106,7 +140,7 @@ describe("api", () => {
         env,
       )
     ).json<{ code: string; url: string | null; expiresAt: string }>();
-    expect(minted.code).toMatch(/^[0-9a-f]{8}$/);
+    expect(minted.code).toMatch(/^[0-9a-f]{16}$/);
     expect(minted.url).toBeNull();
 
     const stored = await getDb(env)
