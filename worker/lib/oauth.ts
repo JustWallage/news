@@ -53,7 +53,7 @@ const fakeGoogleAuth: GoogleAuth = {
     code === "boom"
       ? Promise.reject(new Error("token exchange failed"))
       : Promise.resolve({
-          email: "just@wallage.nl",
+          email: "user@example.test",
           emailVerified: code !== "unverified",
         }),
 };

@@ -18,7 +18,7 @@ const probeApp = () => {
   return app;
 };
 
-const USER = "just@wallage.nl";
+const USER = "user@example.test";
 
 beforeEach(async () => {
   await getDb(env).delete(sessions);

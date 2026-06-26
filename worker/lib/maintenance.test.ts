@@ -6,7 +6,7 @@ import { getDb } from "./db";
 import { purgeExpired } from "./maintenance";
 import { createSession } from "./session";
 
-const USER = "just@wallage.nl";
+const USER = "user@example.test";
 
 beforeEach(async () => {
   const db = getDb(env);

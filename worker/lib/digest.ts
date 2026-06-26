@@ -31,7 +31,6 @@ export interface Verdict {
   id: number;
   relevant: boolean;
   score: number;
-  reason: string;
 }
 
 /** The external dependency seam for relevance filtering (Workers AI in prod). */
@@ -275,7 +274,7 @@ export async function curateForUser(
               storyId: c.id,
               relevant: verdict.relevant,
               relevanceScore: verdict.score,
-              reason: verdict.reason,
+              reason: "",
               curatedAt: now,
             },
           ];

@@ -48,7 +48,6 @@ const keywordFilter = (needle: string): AiFilter => ({
         id: s.id,
         relevant: s.title.toLowerCase().includes(needle),
         score: 80,
-        reason: "x",
       })),
     ),
 });
@@ -71,7 +70,7 @@ function countingFilter(needle: string): {
   };
 }
 
-const USER = "just@wallage.nl";
+const USER = "user@example.test";
 
 beforeEach(async () => {
   const db = getDb(env);

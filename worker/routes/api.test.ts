@@ -8,7 +8,7 @@ import { app } from "../index";
 // The test pool runs in the e2e env (ENVIRONMENT=e2e, no AI binding), so identity
 // comes from the test headers and createDeps wires the deterministic fakes — the
 // digest pipeline runs hermetically (canned data + keyword filter).
-const EMAIL = "just@wallage.nl";
+const EMAIL = "user@example.test";
 const authHeaders = {
   "X-Test-User-Email": EMAIL,
   "X-Test-Auth": "unit-test-token",

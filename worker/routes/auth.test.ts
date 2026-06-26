@@ -105,7 +105,7 @@ describe("/auth/config", () => {
 describe("/auth/logout", () => {
   it("deletes the session and clears the cookie", async () => {
     const db = getDb(env);
-    const { token } = await createSession(db, "just@wallage.nl", new Date());
+    const { token } = await createSession(db, "user@example.test", new Date());
     const res = await app.request(
       "/auth/logout",
       { method: "POST", headers: { cookie: `${SESSION_COOKIE}=${token}` } },

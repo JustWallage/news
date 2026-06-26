@@ -4,7 +4,7 @@ import { digestRuns } from "../../db/schema";
 import { getDb } from "./db";
 import { digestCooldownRemainingMs, recordDigestRun } from "./rate-limit";
 
-const USER = "just@wallage.nl";
+const USER = "user@example.test";
 const COOLDOWN = 10 * 60 * 1000;
 
 beforeEach(async () => {

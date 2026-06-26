@@ -11,7 +11,7 @@ import { sendDailyDigest, sendDueDigests } from "./scheduled";
 import type { TelegramClient } from "./telegram";
 import { minuteOfDayInTz } from "./time";
 
-const USER = "just@wallage.nl";
+const USER = "user@example.test";
 const CHAT = 4242;
 const APP = "https://news.justwallage.nl";
 

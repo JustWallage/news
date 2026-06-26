@@ -143,11 +143,19 @@ prefVersion, userEmail, now)` then, per user, reuses curations
   `loadPreferences` returns `{ text, version }`; `count` = relevant candidates.
   Story rows are never deleted. `runDigest` = `fetchFrontPage` then
   `curateForUser` (the single-user path used by the route + Telegram `/fetch`).
-- `lib/ai.ts`: Workers AI returns this model's output OpenAI-style
-  (`choices[0].message.content`, a JSON string), NOT `{response}` — `parseVerdicts`
-  handles both. Set `max_tokens` (default ~256 truncates a batch → `finish_reason:
-"length"` → unparseable JSON); batches run concurrently and are kept small so
-  each response fits. `worker/lib/ai.test.ts` pins these shapes.
+- `lib/ai.ts`: the model is asked to list ONLY the relevant stories
+  (`{"relevant":[{id,score}]}`), not a verdict per story — output scales with
+  matches (few), not the front page (~50). `select` then synthesizes the full
+  `Verdict[]`: stories the model listed are relevant, every OTHER story in that
+  batch is `relevant:false` — so a successfully-parsed batch is authoritative and
+  all its stories get cached at `prefVersion` (never re-curated). `parseRelevant`
+  returns `null` on an UNPARSEABLE batch (truncation/malformed) vs `[]` for a
+  valid "nothing matched" — the null case returns no verdicts so those stories
+  retry next refresh; the `[]` case still marks the whole batch judged. Workers AI
+  returns this model's output OpenAI-style (`choices[0].message.content`, a JSON
+  string), NOT `{response}` — `parseRelevant` handles both. Set `max_tokens`
+  (default ~256 can truncate → unparseable JSON); batches run concurrently and are
+  kept small. `worker/lib/ai.test.ts` pins these shapes + the synthesis.
 - Two platform limits shape the writes: Workers Free caps **subrequests at 50**
   (hence one front-page request, not 1+N item fetches), and D1 caps a query at
   **100 bound parameters** — so the multi-row upserts are CHUNKED

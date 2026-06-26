@@ -18,7 +18,7 @@ export default defineConfig({
             // Test-only values; auth tests override ENVIRONMENT per request.
             TEST_AUTH_TOKEN: "unit-test-token",
             TELEGRAM_WEBHOOK_SECRET: "unit-webhook-secret",
-            DEV_USER_EMAIL: "just@wallage.nl",
+            DEV_USER_EMAIL: "user@example.test",
             // Applied to the fresh per-file D1 by worker/test-setup.ts.
             TEST_MIGRATIONS: migrations,
           },

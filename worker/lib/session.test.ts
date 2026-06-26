@@ -9,7 +9,7 @@ import {
   SESSION_TTL_MS,
 } from "./session";
 
-const USER = "just@wallage.nl";
+const USER = "user@example.test";
 
 beforeEach(async () => {
   await getDb(env).delete(sessions);

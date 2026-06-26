@@ -110,7 +110,6 @@ export const fakeAiFilter: AiFilter = {
           id: story.id,
           relevant,
           score: relevant ? 80 : 0,
-          reason: relevant ? "keyword match" : "",
         };
       }),
     );

@@ -14,7 +14,7 @@ import {
   saveTimezone,
 } from "./telegram-bot";
 
-const USER = "just@wallage.nl";
+const USER = "user@example.test";
 const CHAT = 4242;
 const TZ = "America/New_York";
 
