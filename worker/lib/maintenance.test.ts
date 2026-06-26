@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { sessions, telegram } from "../../db/schema";
+import { emailLoginCodes, sessions, telegram } from "../../db/schema";
 import { getDb } from "./db";
 import { purgeExpired } from "./maintenance";
 import { createSession } from "./session";
@@ -12,6 +12,7 @@ beforeEach(async () => {
   const db = getDb(env);
   await db.delete(sessions);
   await db.delete(telegram);
+  await db.delete(emailLoginCodes);
 });
 
 describe("purgeExpired", () => {
@@ -56,6 +57,33 @@ describe("purgeExpired", () => {
     // The chat binding and timezone survive the purge.
     expect(rows[0]?.chatId).toBe(4242);
     expect(rows[0]?.timezone).toBe("America/New_York");
+  });
+
+  it("deletes expired email sign-in codes and keeps live ones", async () => {
+    const db = getDb(env);
+    const now = new Date("2026-06-22T03:00:00Z");
+    await db.insert(emailLoginCodes).values([
+      {
+        email: "live@example.com",
+        codeHash: "h1",
+        expiresAt: new Date(now.getTime() + 60_000),
+        attempts: 0,
+        lastSentAt: now,
+      },
+      {
+        email: "stale@example.com",
+        codeHash: "h2",
+        expiresAt: new Date(now.getTime() - 1000),
+        attempts: 0,
+        lastSentAt: new Date(now.getTime() - 60_000),
+      },
+    ]);
+
+    await purgeExpired(db, now);
+
+    const rows = await db.select().from(emailLoginCodes);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.email).toBe("live@example.com");
   });
 
   it("leaves an unexpired link code untouched", async () => {

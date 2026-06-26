@@ -1,7 +1,7 @@
 # news
 
 A public, AI-curated Hacker News front page, hosted at `news.justwallage.nl` on
-Cloudflare. Sign in with Google and get your own feed.
+Cloudflare. Sign in with Google or your email and get your own feed.
 
 The Worker pulls the Hacker News front page (the Algolia HN API — one request,
 full content) and filters it through Workers AI (Llama 70B) against your
@@ -43,7 +43,11 @@ button or `await fetch("/api/digest/run", { method: "POST" })`.
   box describing what you want to read, and a Generate start command button for
   linking Telegram.
 
-Unauthenticated visitors get a "Sign in with Google" screen.
+Unauthenticated visitors get a landing page with two sign-in options: Google, or
+email — enter your address to receive a 6-digit one-time code (the email also
+carries a magic link that fills the code in and signs you in). Email sign-in
+sends through Cloudflare Email Sending, so `EMAIL_FROM` must be on a domain
+onboarded to it (SPF/DKIM/DMARC); see [docs/BOOTSTRAP.md](docs/BOOTSTRAP.md).
 
 ## Telegram bot
 
@@ -56,7 +60,9 @@ picks to the chat. Setup is in [docs/BOOTSTRAP.md](docs/BOOTSTRAP.md).
 
 Built to be opened to the public. Sessions are opaque random tokens stored only
 as their SHA-256 hash; sign-in is Google OAuth (PKCE + state, `email_verified`
-enforced) gated by Cloudflare Turnstile against bots. The on-demand feed refresh
+enforced) or an emailed one-time code (stored only as a salted hash, 10-min TTL,
+attempt-capped + resend-throttled), both gated by Cloudflare Turnstile against
+bots. The on-demand feed refresh
 is rate-limited per user to bound Workers AI cost. Responses carry a strict CSP
 (`public/_headers`) plus HSTS, `X-Frame-Options`, nosniff and a referrer policy,
 and state-changing requests are Origin-checked on top of the SameSite cookie. See

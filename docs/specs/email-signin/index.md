@@ -66,8 +66,10 @@ identical to how Google sign-in works today.
   `/auth/callback` (creates session), `/auth/logout`. Mounted at `/auth`
   (`worker/index.ts`), **outside** `/api`, so it is reachable without a session.
 - `worker/lib/session.ts` — `createSession`, `lookupSession`, `deleteSession`,
-  `SESSION_COOKIE` ("session"), `SESSION_TTL_MS` (30d). Session cookie is
-  httpOnly + secure + SameSite=Lax.
+  `SESSION_COOKIE` (`"__Host-session"`), `SESSION_TTL_MS` (30d). The `__Host-`
+  prefix REQUIRES the cookie be set with `secure: true`, `path: "/"`, and **no**
+  `Domain` (Hono throws otherwise) — the verify route must set the session cookie
+  with exactly the options `/auth/callback` uses.
 - `worker/lib/oauth.ts` — the **fake-seam reference**: `makeGoogleAuth(env, …)`
   returns a deterministic fake in local/e2e and a real client (or `null` →
   fail-closed) in prod.
@@ -84,8 +86,10 @@ identical to how Google sign-in works today.
   hashed, expiring credential.
 - `shared/api.ts` — Zod schemas are THE API contracts; add new request/response
   schemas here (never redefine locally).
-- `src/components/AuthGate.tsx` — `SignIn` screen (currently Google button +
-  Turnstile widget) and `AuthGate` (checks `/api/health`, shows `SignIn` on 401).
+- `src/components/LandingPage.tsx` — the unauthenticated screen; its `SignInCta`
+  renders the Google button / Turnstile widget. `src/components/AuthGate.tsx`
+  checks `/api/health` and renders `<LandingPage />` on 401. (The sign-in UI
+  moved out of `AuthGate` into `LandingPage` — add the email form there.)
 - `wrangler.jsonc` — bindings/vars per env. Bindings are **not** inherited by
   named envs; declare per env where needed (note how `ai` is declared in
   top-level + production but omitted in e2e).
@@ -199,28 +203,30 @@ export const emailLoginVerifySchema = z.object({
 // verify reuses okSchema
 ```
 
-### SPA — `src/components/AuthGate.tsx`
+### SPA — `src/components/LandingPage.tsx`
 
-Rework `SignIn` into a small two-step email form **plus** the existing Google
-button, sharing one Turnstile token:
+Add a small two-step email form to the landing page's sign-in area, **alongside**
+the existing Google `SignInCta`. Keep the landing-page copy/layout intact; the
+email form sits with the Google button (e.g. an "or" divider under the hero CTA).
 
 - Step 1 (email): email `<input>` + "Email me a code" button → POST
-  `/auth/email/request` (include the Turnstile token when present, and `devCode`
-  is auto-filled into the code input in local/e2e). On success → step 2.
-- Step 2 (code): 6-digit `<input>` + "Sign in" button → POST `/auth/email/verify`.
-  On success → re-check `/api/health` (or reload) so `AuthGate` re-renders into
-  the app. On 400 → inline error; allow retry / "use a different email".
-- Keep the Google button + Turnstile widget. When Turnstile is configured, both
-  the email-request and the Google sign-in require a token (gate both on it);
-  when unconfigured (local/e2e), no token is needed.
-- **Magic link**: on `SignIn` mount, read `login_email` + `login_code` from
-  `window.location.search`. If both present → prefill the code field, auto-submit
-  the verify request, and `history.replaceState` to strip the params from the URL
-  regardless of outcome.
-- Use the existing UI primitives (`Card`, `Button`, and the project's `Input`
-  component if present under `src/components/ui/`; otherwise a styled `<input>`
-  consistent with the design). `apiFetch` is the fetch helper; POSTs are
-  same-origin so the session cookie is set on the verify response.
+  `/auth/email/request` (include the Turnstile token when present; in local/e2e
+  the response's `devCode` is auto-filled into the code input). On success → step 2.
+- Step 2 (code): 6-digit `<input>` + "Sign in" button → POST
+  `/auth/email/verify`. On success → re-check `/api/health` (or `location.reload`)
+  so `AuthGate` re-renders into the app. On 400 → inline error; allow retry / "use
+  a different email".
+- The Google button + Turnstile widget stay as-is. When Turnstile is configured,
+  obtain the token once and require it for the email-request submit too (gate both
+  paths on it); when unconfigured (local/e2e), no token is needed.
+- **Magic link**: on mount, read `login_email` + `login_code` from
+  `window.location.search`. If both present → show step 2, prefill the code field,
+  auto-submit the verify request, and `history.replaceState` to strip the params
+  from the URL regardless of outcome.
+- Use the existing UI primitives: `Button` and `Input` (`src/components/ui/`).
+  `apiFetch` + `jsonInit` (`src/lib/api.ts`) are the fetch helpers; POSTs are
+  same-origin so the session cookie is set on the verify response. Keep the
+  Turnstile/CTA logic colocated — a small extra component in this file is fine.
 
 ### Config
 

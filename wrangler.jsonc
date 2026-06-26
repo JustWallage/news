@@ -17,6 +17,11 @@
   // the e2e env so CI — which has no Cloudflare creds — never opens a remote AI
   // connection).
   "ai": { "binding": "AI" },
+  // Email sign-in sends one-time codes through the Cloudflare Email Sending
+  // binding. Like `ai`, bindings are NOT inherited by named envs, so it is
+  // redeclared in `production` below and intentionally OMITTED in `e2e` (the
+  // fake email seam covers local/e2e — see worker/lib/email.ts).
+  "send_email": [{ "name": "EMAIL" }],
   "vars": {
     "ENVIRONMENT": "local",
     // APP_URL is the OAuth redirect base + the Telegram summary footer link.
@@ -70,6 +75,7 @@
       "ai": {
         "binding": "AI",
       },
+      "send_email": [{ "name": "EMAIL" }],
       // The custom domain is created here (by wrangler at deploy time, when the
       // worker exists) rather than in Terraform, which runs before the worker.
       "routes": [{ "pattern": "news.justwallage.nl", "custom_domain": true }],
@@ -86,6 +92,10 @@
         // spend); the front page is already cached 5 min and scheduled Telegram
         // digests are exempt.
         "DIGEST_COOLDOWN_SECONDS": 600,
+        // From address for email sign-in codes. Must be on a domain onboarded to
+        // Cloudflare Email Sending (SPF/DKIM/DMARC). Absent here → sign-in email
+        // fails closed (503) via makeEmailSender.
+        "EMAIL_FROM": "news@justwallage.nl",
       },
       "d1_databases": [
         {
