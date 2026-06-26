@@ -7,7 +7,22 @@
     "not_found_handling": "single-page-application",
     // /telegram/* (bot webhook) and /auth/* (Google sign-in) live outside /api
     // and must hit the worker rather than fall through to the SPA assets.
-    "run_worker_first": ["/api/*", "/telegram/*", "/auth/*"],
+    // The /e/ /flags/ /array/ /static/ /s/ paths are PostHog's: on the
+    // e.news.justwallage.nl proxy host they must reach the worker (which forwards
+    // them to PostHog, see worker/lib/posthog-proxy.ts) instead of being served
+    // by the SPA asset handler. run_worker_first is path- not host-scoped, so
+    // these also hit the worker on news.justwallage.nl — harmless, the SPA (Vite
+    // emits under /assets/) never requests them, and Hono just 404s.
+    "run_worker_first": [
+      "/api/*",
+      "/telegram/*",
+      "/auth/*",
+      "/e/*",
+      "/flags/*",
+      "/array/*",
+      "/static/*",
+      "/s/*",
+    ],
   },
   "observability": {
     "enabled": true,
