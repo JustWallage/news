@@ -26,6 +26,20 @@ independently of hn/ai**: real iff `TELEGRAM_BOT_TOKEN` is set, else the no-op
 `createDeps` directly. Every handler and `runDigest` are environment-agnostic —
 no `ENVIRONMENT`/`isTest` checks leak into logic, and there is no test-only route.
 
+## PostHog reverse proxy (`lib/posthog-proxy.ts`, `index.ts` fetch)
+
+- The prod worker owns a SECOND custom domain, `e.news.justwallage.nl`
+  (wrangler.jsonc `production.routes`, DNS+cert auto-provisioned by wrangler). The
+  default-export `fetch` checks the host FIRST: that host bypasses the Hono app
+  entirely (`proxyPostHog`) — no auth/CSRF/secureHeaders/no-store — and forwards
+  to PostHog EU (`/static/*` + `/array/*` → `eu-assets.i.posthog.com`, else
+  `eu.i.posthog.com`), passing PostHog's own CORS + cache headers straight back.
+  It exists so ad blockers (which match `*.posthog.com`) don't drop the SPA's
+  analytics. Cookies are stripped; `CF-Connecting-IP` → `X-Forwarded-For`. Other
+  envs never carry this domain, so the branch is prod-only in practice. The SPA
+  init is prod-gated separately (`src/lib/analytics.ts`, `import.meta.env.PROD`),
+  and `public/_headers` allows the proxy origin in `connect-src`/`script-src`.
+
 ## Security headers & CSRF (`index.ts`, `middleware/csrf.ts`, `public/_headers`)
 
 - `index.ts` mounts `hono/secureHeaders` (HSTS, `X-Frame-Options: DENY`, nosniff,

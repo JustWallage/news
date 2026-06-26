@@ -70,9 +70,15 @@
       "ai": {
         "binding": "AI",
       },
-      // The custom domain is created here (by wrangler at deploy time, when the
+      // The custom domains are created here (by wrangler at deploy time, when the
       // worker exists) rather than in Terraform, which runs before the worker.
-      "routes": [{ "pattern": "news.justwallage.nl", "custom_domain": true }],
+      // e.news.justwallage.nl is the first-party PostHog reverse proxy: the fetch
+      // handler routes that host to PostHog (see worker/lib/posthog-proxy.ts) so
+      // ad blockers don't drop analytics. wrangler auto-provisions its DNS + cert.
+      "routes": [
+        { "pattern": "news.justwallage.nl", "custom_domain": true },
+        { "pattern": "e.news.justwallage.nl", "custom_domain": true },
+      ],
       // The */5 heartbeat drives the Telegram daily summaries — each tick acts
       // only for the users whose configured Amsterdam-time slot matches.
       "triggers": {
