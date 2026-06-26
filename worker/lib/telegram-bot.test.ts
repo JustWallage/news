@@ -101,6 +101,28 @@ describe("handleTelegramUpdate", () => {
     expect(reused?.reply).toContain("invalid or expired");
   });
 
+  it("refuses to link a chat already bound to another account", async () => {
+    const db = getDb(env);
+    const other = "someone-else@wallage.nl";
+
+    // The chat links to USER first.
+    const first = await mintLinkCode(db, USER, TZ, new Date());
+    await handleTelegramUpdate(db, message(`/start ${first.code}`));
+    expect((await loadTelegramStatus(db, USER)).linked).toBe(true);
+
+    // The SAME chat then tries a fresh code minted by a different account.
+    const second = await mintLinkCode(db, other, TZ, new Date());
+    const res = await handleTelegramUpdate(
+      db,
+      message(`/start ${second.code}`),
+    );
+    expect(res?.reply).toContain("already linked to another account");
+
+    // The original link is intact and the other account stays unlinked.
+    expect((await loadTelegramStatus(db, USER)).linked).toBe(true);
+    expect((await loadTelegramStatus(db, other)).linked).toBe(false);
+  });
+
   it("rejects commands from an unlinked chat", async () => {
     const db = getDb(env);
     const res = await handleTelegramUpdate(db, message("/cur_preferences"));

@@ -32,15 +32,15 @@ describe("/auth/login", () => {
     expect(res.headers.get("location")).toContain(
       "accounts.google.test/authorize",
     );
-    expect(cookieValue(res, "oauth_state")).toBeDefined();
-    expect(cookieValue(res, "oauth_verifier")).toBeDefined();
+    expect(cookieValue(res, "__Host-oauth_state")).toBeDefined();
+    expect(cookieValue(res, "__Host-oauth_verifier")).toBeDefined();
   });
 });
 
 describe("/auth/callback", () => {
   async function login(): Promise<{ cookies: string; state: string }> {
     const res = await app.request("/auth/login", {}, env);
-    const state = cookieValue(res, "oauth_state");
+    const state = cookieValue(res, "__Host-oauth_state");
     if (state === undefined) {
       throw new Error("login did not set a state cookie");
     }
