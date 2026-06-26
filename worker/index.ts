@@ -4,6 +4,7 @@ import { meSchema } from "../shared/api";
 import type { AppEnv } from "./env";
 import { createDeps } from "./lib/deps";
 import { runScheduledMaintenance } from "./lib/maintenance";
+import { isPostHogProxyHost, proxyPostHog } from "./lib/posthog-proxy";
 import { runTelegramDigests } from "./lib/scheduled";
 import { authMiddleware } from "./middleware/auth";
 import { originGuard } from "./middleware/csrf";
@@ -69,7 +70,15 @@ app.route("/auth", authRoutes);
 app.route("/telegram", telegramWebhookRoutes);
 
 export default {
-  fetch: app.fetch,
+  fetch: (request, env, ctx) => {
+    // The PostHog reverse-proxy host bypasses Hono entirely (no auth/CSRF/
+    // no-store): PostHog supplies its own CORS + cache headers. Only the prod
+    // worker carries this custom domain, so other envs never hit this branch.
+    if (isPostHogProxyHost(new URL(request.url).hostname)) {
+      return proxyPostHog(request);
+    }
+    return app.fetch(request, env, ctx);
+  },
   scheduled: (controller, env, ctx) => {
     const now = new Date(controller.scheduledTime);
     ctx.waitUntil(
