@@ -84,6 +84,20 @@ export const sessions = sqliteTable("sessions", {
   expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
 });
 
+// Pending email sign-in codes — one row per (normalized) email address. The
+// 6-digit one-time code is stored only as sha256Hex(`${email}:${code}`), so a DB
+// read alone never yields a usable code (mirrors the sessions table). A new
+// request upserts the row, resetting attempts; a successful verify deletes it;
+// `attempts` caps brute-force and `lastSentAt` anchors the resend cooldown.
+// Expired rows are ignored at verify time and purged nightly.
+export const emailLoginCodes = sqliteTable("email_login_codes", {
+  email: text("email").primaryKey(),
+  codeHash: text("code_hash").notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  lastSentAt: integer("last_sent_at", { mode: "timestamp" }).notNull(),
+});
+
 // Per-user timestamp of the last on-demand digest run, used to rate-limit the
 // expensive Workers AI curation (POST /api/digest/run). One row per user.
 export const digestRuns = sqliteTable("digest_runs", {

@@ -18,6 +18,25 @@ export const healthSchema = z.object({
 
 export const okSchema = z.object({ ok: z.literal(true) });
 
+// Email sign-in: request a one-time code, then verify it. `turnstileToken` is the
+// Cloudflare Turnstile token when the widget is shown (null/absent otherwise).
+export const emailLoginRequestSchema = z.object({
+  email: z.email(),
+  turnstileToken: z.string().nullish(),
+});
+
+// `devCode` carries the issued code back to the client in local/e2e ONLY (the
+// email fake delivers nothing there); it is never present in production.
+export const emailLoginRequestResultSchema = z.object({
+  ok: z.literal(true),
+  devCode: z.string().optional(),
+});
+
+export const emailLoginVerifySchema = z.object({
+  email: z.email(),
+  code: z.string(),
+});
+
 // ---- URLs ----
 
 // http(s) are the only schemes we ever render as a clickable link. Story URLs
