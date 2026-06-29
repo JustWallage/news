@@ -439,8 +439,9 @@ describe("api", () => {
     const fetchUpdate = webhook({
       message: { chat: { id: 1234 }, text: "/fetch" },
     });
-    // The first /fetch runs the digest in waitUntil, so it needs an execution
-    // context to flush before the test pool tears down its storage.
+    // Both /fetch calls send the feed in waitUntil (the throttled one without a
+    // fresh AI pass), so each needs an execution context to flush before the test
+    // pool tears down its storage.
     const ctx = createExecutionContext();
     const first = await app.request(
       "/telegram/webhook",
@@ -459,12 +460,15 @@ describe("api", () => {
     const afterFirst = await runs();
     expect(afterFirst).toHaveLength(1);
 
+    const ctx2 = createExecutionContext();
     const second = await app.request(
       "/telegram/webhook",
       fetchUpdate,
       throttled,
+      ctx2,
     );
     expect(second.status).toBe(200);
+    await waitOnExecutionContext(ctx2);
 
     // The throttled second /fetch must not record (or re-stamp) a run.
     const afterSecond = await runs();

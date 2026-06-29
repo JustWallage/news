@@ -45,9 +45,10 @@ telegramWebhookRoutes.post("/webhook", async (c) => {
   if (result !== null) {
     const deps = createDeps(c.env);
     await deps.telegram.sendMessage(result.chatId, result.reply);
-    // /fetch: run the digest and send the feed after acking — it takes a
-    // few seconds, so it runs in the background rather than blocking the reply.
-    // The cooldown decision and run were already recorded synchronously above.
+    // /fetch: send the feed after acking — it takes a few seconds, so it runs in
+    // the background rather than blocking the reply. The cooldown decision and
+    // run were already recorded synchronously above; a throttled /fetch sends the
+    // existing curations (`recurate: false`) instead of a fresh AI pass.
     if (result.feedFor !== undefined) {
       c.executionCtx.waitUntil(
         sendDailyDigest(
@@ -57,6 +58,7 @@ telegramWebhookRoutes.post("/webhook", async (c) => {
           result.chatId,
           c.env.APP_URL,
           now,
+          result.recurate ?? true,
         ),
       );
     }

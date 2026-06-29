@@ -301,10 +301,13 @@ async function setSlot(
 export interface TelegramReply {
   chatId: number;
   reply: string;
-  // When set, the caller acknowledges `reply`, then runs a digest for this user
-  // and sends the resulting feed to `chatId` in the background (it takes a few
-  // seconds). Kept off the synchronous reply so the webhook acks Telegram fast.
+  // When set, the caller acknowledges `reply`, then sends this user's feed to
+  // `chatId` in the background (it takes a few seconds). Kept off the synchronous
+  // reply so the webhook acks Telegram fast. `recurate` controls whether a fresh
+  // Workers AI pass runs first (a normal /fetch) or the existing curations are
+  // sent as-is (a /fetch throttled by the shared cooldown).
   feedFor?: string;
+  recurate?: boolean;
 }
 
 // Resolves an incoming update to the reply to send back, applying any side
@@ -361,7 +364,9 @@ export async function handleTelegramUpdate(
         const minutes = Math.ceil(remaining / 60_000);
         return {
           chatId,
-          reply: `⏳ You just refreshed — try again in ${minutes} min.`,
+          reply: `⏳ You refreshed recently — here's your latest feed. Try again in ${minutes} min for a fresh pass.`,
+          feedFor: row.userEmail,
+          recurate: false,
         };
       }
       await recordDigestRun(db, row.userEmail, opts.now);
@@ -369,6 +374,7 @@ export async function handleTelegramUpdate(
         chatId,
         reply: "🔄 Fetching your latest feed — this may take a few seconds…",
         feedFor: row.userEmail,
+        recurate: true,
       };
     }
     case "/set_preferences":

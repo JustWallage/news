@@ -11,10 +11,11 @@ burn the daily Neuron budget.
 
 Apply the same per-user cooldown to `/fetch`: before kicking off the digest in
 the webhook handler, check `digestCooldownRemainingMs()` keyed on the user's
-email (resolved from the `chatId` link). When inside the window, reply with a
-short "you just refreshed, try again in N min" message instead of running the AI.
-Reuse the existing `digest_runs` mechanism so the web Refresh and `/fetch` share
-one budget rather than two independent ones.
+email (resolved from the `chatId` link). When inside the window, send the user's
+last curations as-is instead of running the AI again (a short note names the
+minutes until a fresh pass is allowed). Reuse the existing `digest_runs`
+mechanism so the web Refresh and `/fetch` share one budget rather than two
+independent ones.
 
 Add e2e coverage driving the webhook `/fetch` twice in a row and asserting the
 second is throttled.
@@ -37,8 +38,9 @@ second is throttled.
 ## Requirements
 
 1. A `/fetch` that lands inside the per-user cooldown window MUST NOT run the
-   Workers AI digest. It replies with a short throttle message naming the
-   minutes remaining.
+   Workers AI digest. It still delivers the user's existing curations (the last
+   feed) to the chat, prefixed by a short note naming the minutes until a fresh
+   pass is allowed.
 2. `/fetch` and `POST /api/digest/run` share ONE budget: an allowed `/fetch`
    records a run in `digest_runs` (same table/keying as the web path), and a web
    Refresh likewise blocks a too-soon `/fetch` and vice-versa.
@@ -53,33 +55,40 @@ second is throttled.
 - **Decision point lives in `handleTelegramUpdate`.** The webhook passes
   `cooldownMs = env.DIGEST_COOLDOWN_SECONDS * 1000` and `now` into the resolver.
   For `/fetch`: compute `digestCooldownRemainingMs`; if `> 0`, return the throttle
-  reply with **no** `feedFor`; otherwise `recordDigestRun` and return the existing
-  "Fetching…" reply with `feedFor`. Env knowledge stays in the route; the decision
-  (and thus the throttle message) is pure and directly unit-testable.
+  reply with `feedFor` set and `recurate: false` (deliver the existing feed, no AI);
+  otherwise `recordDigestRun` and return the "Fetching…" reply with `feedFor` and
+  `recurate: true`. Env knowledge stays in the route; the decision is pure and
+  directly unit-testable.
+- **`recurate` flag on `sendDailyDigest`** (default `true`): when `false`, it
+  skips `runDigest` (the Workers AI pass) and just loads + sends the existing
+  feed. The webhook passes `result.recurate ?? true`.
 - **Record at decision time** (synchronously, before the background `waitUntil`
-  digest), mirroring where the check happens and bounding abuse even if the
-  background run later fails. The web path records after a successful run; the
-  small difference is deliberate and stronger for the Neuron-budget goal.
-- **Throttle message:** `⏳ You just refreshed — try again in N min.` where
-  `N = Math.ceil(remaining / 60_000)`.
+  send), mirroring where the check happens and bounding abuse even if the
+  background send later fails. A throttled `/fetch` does NOT record a run (it
+  consumes no AI budget). The web path records after a successful run; the small
+  difference is deliberate and stronger for the Neuron-budget goal.
+- **Throttle note:** `⏳ You refreshed recently — here's your latest feed. Try
+again in N min for a fresh pass.` where `N = Math.ceil(remaining / 60_000)`;
+  the existing feed message follows it.
 - The webhook keeps acking with `200` regardless (Telegram contract unchanged).
 
 ## Tests
 
 The original ask said "e2e", but a Playwright e2e cannot observe throttling:
-`DIGEST_COOLDOWN_SECONDS` is `0` in e2e, the throttle reply goes to a fake
-Telegram client, and the webhook's `waitUntil` digest is not flushed in tests.
-Coverage instead lands where it is observable and runs under `pnpm check`:
+`DIGEST_COOLDOWN_SECONDS` is `0` in e2e, the reply goes to a fake Telegram client,
+and the webhook's `waitUntil` send is not flushed in tests. Coverage instead lands
+where it is observable and runs under `pnpm check`:
 
 1. **`worker/lib/telegram-bot.test.ts` (unit):** drive `/fetch` twice for a linked
-   chat with `cooldownMs > 0`. First call returns `feedFor` set and records a run;
-   second call returns the throttle reply and `feedFor === undefined`. With
-   `cooldownMs = 0`, both calls return `feedFor` (unthrottled).
+   chat with `cooldownMs > 0`. First call returns `feedFor` set, `recurate: true`,
+   and records a run; second call returns `feedFor` set with `recurate: false`
+   (existing feed, no AI). With `cooldownMs = 0`, both calls `recurate`
+   (unthrottled).
 2. **`worker/routes/api.test.ts` (integration):** drive the real `/telegram/webhook`
    `/fetch` twice with a non-zero `DIGEST_COOLDOWN_SECONDS` env override
-   (`app.request(url, init, { ...env, DIGEST_COOLDOWN_SECONDS: 600 })`); assert the
-   `digest_runs` row records exactly one run (the second `/fetch` does not advance
-   `lastRunAt`).
+   (`app.request(url, init, { ...env, DIGEST_COOLDOWN_SECONDS: 600 }, ctx)`); assert
+   the `digest_runs` row records exactly one run (the throttled second `/fetch` does
+   not advance `lastRunAt`).
 
 ## Docs
 
