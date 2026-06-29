@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { preferences, telegram } from "../../db/schema";
+import { digestRuns, preferences, telegram } from "../../db/schema";
 import { getDb } from "./db";
 import {
   dueSlot,
@@ -31,6 +31,7 @@ beforeEach(async () => {
   const db = getDb(env);
   await db.delete(telegram);
   await db.delete(preferences);
+  await db.delete(digestRuns);
 });
 
 describe("parseDailyTime", () => {
@@ -151,6 +152,23 @@ describe("handleTelegramUpdate", () => {
     const res = await handleTelegramUpdate(db, message("/fetch"));
     expect(res?.reply).toContain("few seconds");
     expect(res?.feedFor).toBe(USER);
+  });
+
+  it("sends the existing feed without re-curating inside the cooldown window", async () => {
+    const db = getDb(env);
+    const { code } = await mintLinkCode(db, USER, TZ, new Date());
+    await handleTelegramUpdate(db, message(`/start ${code}`));
+    const opts = { cooldownMs: 600_000, now: new Date() };
+
+    const first = await handleTelegramUpdate(db, message("/fetch"), opts);
+    expect(first?.feedFor).toBe(USER);
+    expect(first?.recurate).toBe(true);
+
+    // A throttled /fetch still delivers the feed, but skips the Workers AI pass.
+    const second = await handleTelegramUpdate(db, message("/fetch"), opts);
+    expect(second?.feedFor).toBe(USER);
+    expect(second?.recurate).toBe(false);
+    expect(second?.reply).toContain("latest feed");
   });
 
   it("answers /help and falls back to help for unknown commands", async () => {

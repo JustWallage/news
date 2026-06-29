@@ -169,7 +169,11 @@ prefVersion, userEmail, now)` then, per user, reuses curations
   user via `c.var.deps` — no environment gate. It IS rate-limited per user via
   `lib/rate-limit.ts` (the `digest_runs` table) by `DIGEST_COOLDOWN_SECONDS`
   (0 = off in local/e2e); a request inside the window 429s with `Retry-After` and
-  does NOT run the AI. The cron and Telegram `/fetch` paths are NOT rate-limited.
+  does NOT run the AI. Telegram `/fetch` shares the SAME `digest_runs` budget:
+  `handleTelegramUpdate` checks the cooldown and records the run synchronously
+  (the webhook passes `cooldownMs`/`now`). A throttled `/fetch` still delivers the
+  feed but with `recurate: false` — `sendDailyDigest` skips the Workers AI pass
+  and sends the existing curations. Only the cron path is NOT rate-limited.
 - `index.ts` `scheduled` has ONE cron, `*/5 * * * *` → `runTelegramDigests` →
   `sendDueDigests`: load the `telegram` rows whose `chatId` is set and at least
   one slot is configured, then keep those whose slot matches the current minute

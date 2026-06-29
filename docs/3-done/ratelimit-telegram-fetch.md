@@ -9,8 +9,8 @@ burn the daily Neuron budget.
 
 Apply the same per-user cooldown to `/fetch`: before kicking off the digest in
 the webhook handler, check `digestCooldownRemainingMs()` keyed on the user's
-email (resolved from the `chatId` link). When inside the window, reply with a
-short "you just refreshed, try again in N min" message instead of running the AI.
+email (resolved from the `chatId` link). When inside the window, send the user's
+last curations as-is instead of running the AI again.
 Reuse the existing `digest_runs` mechanism so the web Refresh and `/fetch` share
 one budget rather than two independent ones.
 

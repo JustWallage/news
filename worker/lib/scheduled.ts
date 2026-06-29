@@ -15,9 +15,11 @@ import { formatDigestMessage } from "./telegram";
 import { dueSlot } from "./telegram-bot";
 import { minuteOfDayInTz } from "./time";
 
-// Re-run the digest for the user, then push the freshly curated feed to their
-// Telegram chat. Used by the Telegram /fetch command (a single-user on-demand
-// run). Deps are injected so a recording client can assert the send.
+// Push the user's curated feed to their Telegram chat. Used by the Telegram
+// /fetch command (a single-user on-demand run). With `recurate` (the default) it
+// re-runs the Workers AI pass first; a /fetch throttled by the shared cooldown
+// passes `recurate: false` to send the existing curations as-is. Deps are
+// injected so a recording client can assert the send.
 export async function sendDailyDigest(
   db: Db,
   deps: Deps,
@@ -25,9 +27,12 @@ export async function sendDailyDigest(
   chatId: number,
   appUrl: string,
   now: Date,
+  recurate = true,
 ): Promise<void> {
-  const prefs = await loadPreferences(db, userEmail);
-  await runDigest(db, deps, prefs.text, prefs.version, userEmail, now);
+  if (recurate) {
+    const prefs = await loadPreferences(db, userEmail);
+    await runDigest(db, deps, prefs.text, prefs.version, userEmail, now);
+  }
   const feed = await loadFeed(db, userEmail);
   await deps.telegram.sendMessage(chatId, formatDigestMessage(feed, appUrl));
 }
