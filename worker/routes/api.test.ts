@@ -1,7 +1,17 @@
+import {
+  createExecutionContext,
+  waitOnExecutionContext,
+} from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { curations, preferences, stories, telegram } from "../../db/schema";
+import {
+  curations,
+  digestRuns,
+  preferences,
+  stories,
+  telegram,
+} from "../../db/schema";
 import { getDb } from "../lib/db";
 import { app } from "../index";
 
@@ -26,6 +36,7 @@ beforeEach(async () => {
   await db.delete(stories);
   await db.delete(preferences);
   await db.delete(telegram);
+  await db.delete(digestRuns);
 });
 
 describe("api", () => {
@@ -397,5 +408,69 @@ describe("api", () => {
     await app.request("/api/digest/run", json("POST", {}), env);
     expect((await titles()).some((t) => t.includes("bitcoin"))).toBe(true);
     expect((await titles()).some((t) => t.includes("rust"))).toBe(false);
+  });
+
+  it("throttles a second Telegram /fetch within the shared cooldown window", async () => {
+    // Drive the real webhook with a non-zero cooldown (it is 0 in the e2e env).
+    const throttled = { ...env, DIGEST_COOLDOWN_SECONDS: 600 };
+    const webhook = (body: unknown): RequestInit => ({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Telegram-Bot-Api-Secret-Token": "unit-webhook-secret",
+      },
+      body: JSON.stringify(body),
+    });
+    const minted = await (
+      await app.request(
+        "/api/telegram/link-code",
+        json("POST", { timezone: "America/New_York" }),
+        env,
+      )
+    ).json<{ code: string }>();
+    await app.request(
+      "/telegram/webhook",
+      webhook({
+        message: { chat: { id: 1234 }, text: `/start ${minted.code}` },
+      }),
+      throttled,
+    );
+
+    const fetchUpdate = webhook({
+      message: { chat: { id: 1234 }, text: "/fetch" },
+    });
+    // The first /fetch runs the digest in waitUntil, so it needs an execution
+    // context to flush before the test pool tears down its storage.
+    const ctx = createExecutionContext();
+    const first = await app.request(
+      "/telegram/webhook",
+      fetchUpdate,
+      throttled,
+      ctx,
+    );
+    expect(first.status).toBe(200);
+    await waitOnExecutionContext(ctx);
+
+    const runs = (): Promise<{ lastRunAt: Date }[]> =>
+      getDb(env)
+        .select()
+        .from(digestRuns)
+        .where(eq(digestRuns.userEmail, EMAIL));
+    const afterFirst = await runs();
+    expect(afterFirst).toHaveLength(1);
+
+    const second = await app.request(
+      "/telegram/webhook",
+      fetchUpdate,
+      throttled,
+    );
+    expect(second.status).toBe(200);
+
+    // The throttled second /fetch must not record (or re-stamp) a run.
+    const afterSecond = await runs();
+    expect(afterSecond).toHaveLength(1);
+    expect(afterSecond[0]?.lastRunAt.getTime()).toBe(
+      afterFirst[0]?.lastRunAt.getTime(),
+    );
   });
 });

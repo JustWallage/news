@@ -4,6 +4,7 @@ import { PREFERENCES_MAX_LENGTH, type TelegramStatus } from "../../shared/api";
 import botCommands from "./bot-commands.json";
 import type { Db } from "./db";
 import { loadPreferences, savePreferences } from "./digest";
+import { digestCooldownRemainingMs, recordDigestRun } from "./rate-limit";
 import type { TelegramUpdate } from "./telegram";
 
 const LINK_CODE_TTL_MS = 15 * 60 * 1000;
@@ -313,6 +314,9 @@ export interface TelegramReply {
 export async function handleTelegramUpdate(
   db: Db,
   update: TelegramUpdate,
+  // /fetch shares the web Refresh per-user cooldown (digest_runs); the route
+  // supplies the configured window. Defaults disable it for the other commands.
+  opts: { cooldownMs: number; now: Date } = { cooldownMs: 0, now: new Date() },
 ): Promise<TelegramReply | null> {
   const message = update.message;
   if (message === undefined) {
@@ -346,12 +350,27 @@ export async function handleTelegramUpdate(
   switch (command) {
     case "/user":
       return { chatId, reply: `Connected account: ${row.userEmail}` };
-    case "/fetch":
+    case "/fetch": {
+      const remaining = await digestCooldownRemainingMs(
+        db,
+        row.userEmail,
+        opts.cooldownMs,
+        opts.now,
+      );
+      if (remaining > 0) {
+        const minutes = Math.ceil(remaining / 60_000);
+        return {
+          chatId,
+          reply: `⏳ You just refreshed — try again in ${minutes} min.`,
+        };
+      }
+      await recordDigestRun(db, row.userEmail, opts.now);
       return {
         chatId,
         reply: "🔄 Fetching your latest feed — this may take a few seconds…",
         feedFor: row.userEmail,
       };
+    }
     case "/set_preferences":
       return { chatId, reply: await setPreferences(db, row.userEmail, arg) };
     case "/cur_preferences":

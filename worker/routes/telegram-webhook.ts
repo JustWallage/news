@@ -37,12 +37,17 @@ telegramWebhookRoutes.post("/webhook", async (c) => {
     return c.json({ ok: true });
   }
   const db = getDb(c.env);
-  const result = await handleTelegramUpdate(db, parsed.data);
+  const now = new Date();
+  const result = await handleTelegramUpdate(db, parsed.data, {
+    cooldownMs: c.env.DIGEST_COOLDOWN_SECONDS * 1000,
+    now,
+  });
   if (result !== null) {
     const deps = createDeps(c.env);
     await deps.telegram.sendMessage(result.chatId, result.reply);
     // /fetch: run the digest and send the feed after acking — it takes a
     // few seconds, so it runs in the background rather than blocking the reply.
+    // The cooldown decision and run were already recorded synchronously above.
     if (result.feedFor !== undefined) {
       c.executionCtx.waitUntil(
         sendDailyDigest(
@@ -51,7 +56,7 @@ telegramWebhookRoutes.post("/webhook", async (c) => {
           result.feedFor,
           result.chatId,
           c.env.APP_URL,
-          new Date(),
+          now,
         ),
       );
     }

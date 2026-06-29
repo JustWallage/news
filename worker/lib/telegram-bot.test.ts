@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { preferences, telegram } from "../../db/schema";
+import { digestRuns, preferences, telegram } from "../../db/schema";
 import { getDb } from "./db";
 import {
   dueSlot,
@@ -31,6 +31,7 @@ beforeEach(async () => {
   const db = getDb(env);
   await db.delete(telegram);
   await db.delete(preferences);
+  await db.delete(digestRuns);
 });
 
 describe("parseDailyTime", () => {
@@ -151,6 +152,20 @@ describe("handleTelegramUpdate", () => {
     const res = await handleTelegramUpdate(db, message("/fetch"));
     expect(res?.reply).toContain("few seconds");
     expect(res?.feedFor).toBe(USER);
+  });
+
+  it("throttles a second /fetch inside the shared cooldown window", async () => {
+    const db = getDb(env);
+    const { code } = await mintLinkCode(db, USER, TZ, new Date());
+    await handleTelegramUpdate(db, message(`/start ${code}`));
+    const opts = { cooldownMs: 600_000, now: new Date() };
+
+    const first = await handleTelegramUpdate(db, message("/fetch"), opts);
+    expect(first?.feedFor).toBe(USER);
+
+    const second = await handleTelegramUpdate(db, message("/fetch"), opts);
+    expect(second?.feedFor).toBeUndefined();
+    expect(second?.reply).toContain("try again");
   });
 
   it("answers /help and falls back to help for unknown commands", async () => {
