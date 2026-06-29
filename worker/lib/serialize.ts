@@ -1,4 +1,9 @@
-import { storySchema, type Story } from "../../shared/api";
+import {
+  publicStorySchema,
+  storySchema,
+  type PublicStory,
+  type Story,
+} from "../../shared/api";
 
 // The joined shape produced by the feed query (story content + this user's
 // curation fields).
@@ -29,5 +34,24 @@ export function toStory(row: FeedRow): Story {
     relevanceScore: row.relevanceScore,
     reason: row.reason,
     openedAt: row.openedAt === null ? null : row.openedAt.toISOString(),
+  });
+}
+
+// The public-safe projection for the anonymous demo feed: HN-public fields only,
+// never the per-user curation fields.
+export function toPublicStory(
+  row: Pick<
+    FeedRow,
+    "id" | "title" | "url" | "by" | "score" | "comments" | "time"
+  >,
+): PublicStory {
+  return publicStorySchema.parse({
+    id: row.id,
+    title: row.title,
+    url: row.url,
+    by: row.by,
+    score: row.score,
+    comments: row.comments,
+    time: row.time.toISOString(),
   });
 }

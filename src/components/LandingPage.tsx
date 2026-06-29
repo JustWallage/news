@@ -1,5 +1,6 @@
 import { authConfigSchema } from "@shared/api";
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
 
@@ -165,8 +166,16 @@ export function LandingPage() {
             A public, AI-curated Hacker News front page. Sign in, tell it what
             you{"’"}re into, and get your own feed — without the noise.
           </p>
-          <div className="mt-8">
+          <div className="mt-8 flex flex-col items-center gap-3">
             <SignInCta />
+            <Button
+              render={<Link to="/demo" />}
+              nativeButton={false}
+              variant="ghost"
+              size="sm"
+            >
+              Show live demo →
+            </Button>
           </div>
         </section>
 

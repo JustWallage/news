@@ -2,14 +2,20 @@ import type { Story } from "@shared/api";
 import { hnItemUrl, hostname, relativeTime, safeHref } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+// Accepts the structural subset it actually renders so the public demo feed can
+// reuse it with a PublicStory (no openedAt/curation fields) — onOpen is optional
+// because the anonymous demo is read-only (no open-tracking).
 export function StoryRow({
   story,
   rank,
   onOpen,
 }: {
-  story: Story;
+  story: Pick<
+    Story,
+    "id" | "title" | "url" | "by" | "score" | "comments" | "time"
+  > & { openedAt?: Story["openedAt"] };
   rank: number;
-  onOpen: (id: number) => void;
+  onOpen?: (id: number) => void;
 }) {
   const href = safeHref(story.url);
   const target = href ?? hnItemUrl(story.id);
@@ -25,11 +31,11 @@ export function StoryRow({
           target="_blank"
           rel="noreferrer"
           onClick={() => {
-            onOpen(story.id);
+            onOpen?.(story.id);
           }}
           className={cn(
             "font-medium hover:underline",
-            story.openedAt !== null && "text-muted-foreground",
+            story.openedAt != null && "text-muted-foreground",
           )}
         >
           {story.title}

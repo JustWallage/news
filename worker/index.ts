@@ -11,6 +11,7 @@ import { originGuard } from "./middleware/csrf";
 import { authRoutes } from "./routes/auth";
 import { digestRoutes } from "./routes/digest";
 import { preferencesRoutes } from "./routes/preferences";
+import { publicRoutes } from "./routes/public";
 import { storiesRoutes } from "./routes/stories";
 import { telegramRoutes } from "./routes/telegram";
 import { telegramWebhookRoutes } from "./routes/telegram-webhook";
@@ -62,8 +63,13 @@ app.route("/api/telegram", telegramRoutes);
 
 // The Google sign-in flow is intentionally NOT under /api: it must be reachable
 // without a session (that is what it creates), so it sits outside the auth
-// middleware. Same for the Telegram webhook below.
+// middleware. Same for the public demo feed and the Telegram webhook below.
 app.route("/auth", authRoutes);
+
+// The public demo feed is read by anonymous visitors, so it sits outside the
+// auth + deps middleware: no session, and structurally no access to the AI deps
+// (it reads stored curations only).
+app.route("/public", publicRoutes);
 
 // The Telegram webhook cannot present a session, so it sits outside the auth +
 // deps middleware and is guarded by its own secret-token check (see the route).
