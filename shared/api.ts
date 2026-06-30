@@ -74,10 +74,13 @@ export const publicStorySchema = storySchema.pick({
 });
 export type PublicStory = z.infer<typeof publicStorySchema>;
 
+// `preferences` is the owner's plain-text interests blob (empty when unset),
+// shown on the demo so visitors see what the feed is filtered against.
 // lastCuratedAt is the owner's latest curatedAt, for the "last refreshed X" line
 // (null when the owner has no current curations).
 export const demoFeedSchema = z.object({
   stories: z.array(publicStorySchema),
+  preferences: z.string(),
   lastCuratedAt: z.iso.datetime().nullable(),
 });
 export type DemoFeed = z.infer<typeof demoFeedSchema>;

@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
-import { curations, stories } from "../../db/schema";
+import { curations, preferences, stories } from "../../db/schema";
 import { getDb } from "../lib/db";
 import { app } from "../index";
 
@@ -15,6 +15,7 @@ beforeEach(async () => {
   const db = getDb(env);
   await db.delete(curations);
   await db.delete(stories);
+  await db.delete(preferences);
 });
 
 async function seedStories(): Promise<void> {
@@ -30,6 +31,11 @@ describe("public demo feed", () => {
   it("serves the owner's current feed, best matches first, with only public fields", async () => {
     const db = getDb(env);
     await seedStories();
+    await db.insert(preferences).values({
+      userEmail: OWNER,
+      text: "rust and self-hosting",
+      updatedAt: T1,
+    });
     await db.insert(curations).values([
       { userEmail: OWNER, storyId: 1, relevanceScore: 90, reason: "match", curatedAt: T1, current: true, openedAt: TIME }, // prettier-ignore
       { userEmail: OWNER, storyId: 2, relevanceScore: 50, reason: "match", curatedAt: T2, current: true, openedAt: null }, // prettier-ignore
@@ -44,11 +50,13 @@ describe("public demo feed", () => {
 
     const body = await res.json<{
       stories: Record<string, unknown>[];
+      preferences: string;
       lastCuratedAt: string | null;
     }>();
 
     // Only the owner's current curations, ordered by relevance desc.
     expect(body.stories.map((s) => s.id)).toEqual([1, 2]);
+    expect(body.preferences).toBe("rust and self-hosting");
     expect(body.lastCuratedAt).toBe(T2.toISOString());
 
     // Exactly the public fields — no per-user curation fields leak.
@@ -72,8 +80,13 @@ describe("public demo feed", () => {
 
     const body = await (
       await app.request("/public/feed", {}, env)
-    ).json<{ stories: unknown[]; lastCuratedAt: string | null }>();
+    ).json<{
+      stories: unknown[];
+      preferences: string;
+      lastCuratedAt: string | null;
+    }>();
     expect(body.stories).toEqual([]);
+    expect(body.preferences).toBe("");
     expect(body.lastCuratedAt).toBeNull();
   });
 

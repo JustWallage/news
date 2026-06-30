@@ -2,6 +2,7 @@ import { and, desc, eq } from "drizzle-orm";
 import type { DemoFeed, Story } from "../../shared/api";
 import { curations, stories } from "../../db/schema";
 import type { Db } from "./db";
+import { loadPreferences } from "./digest";
 import { toPublicStory, toStory } from "./serialize";
 
 // The user's curated stories (feed or archive) joined to the shared content
@@ -39,9 +40,10 @@ export async function loadFeed(db: Db, userEmail: string): Promise<Story[]> {
 }
 
 // The owner's current feed for the anonymous public demo: the SAME query +
-// ordering as loadFeed, mapped to the public-safe projection, plus the latest
-// curatedAt for the "last refreshed X" line (null when the owner has none).
-// Reads stored curations only — never runs a digest / Workers AI.
+// ordering as loadFeed, mapped to the public-safe projection, plus the owner's
+// preferences text (what the feed is filtered against) and the latest curatedAt
+// for the "last refreshed X" line (null when the owner has none).
+// Reads stored curations + preferences only — never runs a digest / Workers AI.
 export async function loadPublicFeed(
   db: Db,
   ownerEmail: string,
@@ -50,11 +52,12 @@ export async function loadPublicFeed(
     desc(curations.relevanceScore),
     desc(stories.score),
   );
+  const { text } = await loadPreferences(db, ownerEmail);
   const lastCuratedAt =
     rows.length === 0
       ? null
       : new Date(
           Math.max(...rows.map((row) => row.curatedAt.getTime())),
         ).toISOString();
-  return { stories: rows.map(toPublicStory), lastCuratedAt };
+  return { stories: rows.map(toPublicStory), preferences: text, lastCuratedAt };
 }

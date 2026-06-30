@@ -41,6 +41,13 @@ test("the public demo serves the owner's stored feed without re-running the AI f
   await expect(page.getByText(/These are my picks/)).toBeVisible();
   await expect(page.getByText(/Last refreshed/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Refresh" })).toHaveCount(0);
+
+  // The owner's preferences are shown read-only (the latest "bitcoin" text,
+  // even though the stored feed still reflects the earlier "rust" curation).
+  await expect(page.getByText(/Based on these preferences/)).toBeVisible();
+  await expect(page.getByLabel(/Based on these preferences/)).toHaveValue(
+    "bitcoin",
+  );
 });
 
 // Bare Playwright test (no ./fixtures) → no auth headers → the SPA shows the

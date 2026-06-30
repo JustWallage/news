@@ -36,6 +36,24 @@ export function DemoPage() {
             ` Last refreshed ${relativeTime(data.lastCuratedAt)}.`}
         </p>
 
+        {data?.preferences ? (
+          <div className="mt-4">
+            <label
+              htmlFor="demo-preferences"
+              className="text-sm font-medium text-foreground"
+            >
+              Based on these preferences:
+            </label>
+            <textarea
+              id="demo-preferences"
+              readOnly
+              rows={2}
+              value={data.preferences}
+              className="mt-1.5 w-full resize-none rounded-md border border-border bg-muted px-2.5 py-1.5 text-sm text-muted-foreground"
+            />
+          </div>
+        ) : null}
+
         <div className="mt-6">
           {error !== null ? (
             <p className="text-sm text-destructive">

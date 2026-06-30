@@ -52,6 +52,11 @@ naming which account's stored feed is the public demo.
 - **[AI]** Response also carries `lastCuratedAt` (nullable ISO datetime), the
   latest `curatedAt` among the owner's current curations, for the "last refreshed
   X" line.
+- **[user]** Response also carries the owner's `preferences` text (empty when
+  unset), shown on the demo under "Based on these preferences:" in a small
+  read-only box, so visitors see what the feed is filtered against. The owner's
+  interests blob is intentionally public on the demo. Worker reads it via the
+  existing `loadPreferences`; the box is hidden when the text is empty.
 - **[AI]** The existing global `Cache-Control: private, no-store` invariant is
   left **untouched**; the public endpoint inherits it. CDN/public caching of the
   demo is an explicit non-goal here (the AI-budget protection comes from reading

@@ -13,7 +13,8 @@ boundary. Change the schema here FIRST; both sides follow via `z.infer`.
   `/api/telegram` routes. `authConfigSchema` backs `GET /auth/config` (the SPA
   reads `turnstileSiteKey`). `publicStorySchema` (`storySchema.pick` of the
   HN-public fields only — never the per-user `openedAt`/`relevanceScore`/`reason`)
-  and `demoFeedSchema` (`{ stories, lastCuratedAt }`) back the anonymous
+  and `demoFeedSchema` (`{ stories, preferences, lastCuratedAt }` — `preferences`
+  is the owner's plain-text interests shown on the demo) back the anonymous
   `GET /public/feed` demo; deriving from `storySchema` keeps a future private
   field from ever leaking onto the public surface.
   `preferencesUpdateSchema` caps text at the shared

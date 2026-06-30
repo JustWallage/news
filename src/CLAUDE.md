@@ -20,7 +20,9 @@
   wraps only the `Layout` route element, so `/demo` renders for anyone).
   `DemoPage` reads `GET /public/feed` (`demoFeedSchema`) — the owner's live feed
   — and is READ-ONLY: it reuses `StoryRow` with no `onOpen` (no open-tracking)
-  and no Refresh. The landing page's "Show live demo" button links here.
+  and no Refresh. It also shows the owner's `preferences` in a read-only textarea
+  ("Based on these preferences:"), hidden when empty. The landing page's "Show
+  live demo" button links here.
 - `StoryRow` props are a structural subset of `Story` (+ optional `openedAt`,
   optional `onOpen`) so the public demo can pass a `PublicStory`; the feed/archive
   still pass a full `Story`.

@@ -124,11 +124,14 @@ no `ENVIRONMENT`/`isTest` checks leak into logic, and there is no test-only rout
   `app.route("/public", ...)` in `index.ts` **outside `/api`**, like `/auth` and
   the Telegram webhook: no session, and — critically — the `/api/*` deps
   middleware never runs, so the route STRUCTURALLY cannot reach Workers AI. It
-  reads stored `curations` for `OWNER_EMAIL` only (`loadPublicFeed`, the same
-  query + ordering as `loadFeed`), so anonymous traffic can never trigger a
-  digest / burn Neurons. `/public/*` is in `assets.run_worker_first`.
+  reads stored `curations` + `preferences` for `OWNER_EMAIL` only
+  (`loadPublicFeed`, the same query + ordering as `loadFeed`, plus
+  `loadPreferences`), so anonymous traffic can never trigger a digest / burn
+  Neurons. `/public/*` is in `assets.run_worker_first`.
 - The response is the `demoFeedSchema` contract (`shared/api.ts`): only HN-public
-  story fields (via `toPublicStory`) plus `lastCuratedAt` (max `curatedAt`). The
+  story fields (via `toPublicStory`), the owner's `preferences` text (what the
+  feed is filtered against — intentionally public on the demo), plus
+  `lastCuratedAt` (max `curatedAt`). The
   per-user `openedAt`/`relevanceScore`/`reason` are NOT in the public projection.
   The global `no-store` policy is left intact (no public-cache opt-in).
 
