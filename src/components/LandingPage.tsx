@@ -164,7 +164,8 @@ export function LandingPage() {
           </h1>
           <p className="mt-5 max-w-xl text-lg text-pretty text-muted-foreground">
             A public, AI-curated Hacker News front page. Sign in, tell it what
-            you{"’"}re into, and get your own feed — without the noise.
+            you{"’"}re into, and get your own feed + Telegram notifications —
+            without the noise.
           </p>
           <div className="mt-8 flex flex-col items-center gap-3">
             <SignInCta />
