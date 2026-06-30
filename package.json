@@ -21,7 +21,7 @@
     "preview": "vite preview",
     "wrangler:login": "wrangler login",
     "cf-typegen": "wrangler types",
-    "check": "pnpm cf-typegen && pnpm check:format && pnpm check:lint && pnpm check:ts && pnpm check:knip && pnpm check:dup && pnpm check:tf && pnpm test:unit",
+    "check": "pnpm cf-typegen && pnpm check:format && pnpm check:lint && pnpm check:ts && pnpm check:knip && pnpm check:dup && pnpm check:tf && pnpm test:unit && pnpm test:e2e",
     "check:format": "prettier --check .",
     "check:lint": "eslint .",
     "check:ts": "pnpm cf-typegen && tsc -p tsconfig.app.json && tsc -p tsconfig.worker.json && tsc -p tsconfig.e2e.json",

@@ -1,3 +1,5 @@
+Cost overview, ~50 neurons / digest for "AI LLM Startup" preferences
+
 # Rewrite the README around "why" and development velocity
 
 The README is the first file people open from the public repo (especially after

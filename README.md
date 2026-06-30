@@ -1,70 +1,68 @@
 # news
 
-A public, AI-curated Hacker News front page, hosted at `news.justwallage.nl` on
-Cloudflare. Sign in with Google and get your own feed.
+A personal, AI-curated Hacker News front page, live at [news.justwallage.nl](https://news.justwallage.nl). Sign in with Google and get your own feed.
 
-The Worker pulls the Hacker News front page (the Algolia HN API — one request,
-full content) and filters it through Workers AI (Llama 70B) against your
-plain-text preferences blob, storing the matches in D1. The site renders them
-like the HN front page — title (link), points, age, comments — and tracks which
-links you've opened. Curation runs on demand (the Refresh button / Telegram
-`/fetch`) and on a `*/5` cron that pushes a Telegram summary at each user's
-configured slot.
+# Why
+
+### Staying up to date is a chore
+
+Staying up to date with the latest releases and discussions in the tech scene is hard for me, especially since most content is not in your interest. Yet I feel it's necessary to digest at least some news to keep up with the current pace of the current software trends. I wanted a minimal webapp that simply filtered Hacker News based on my (current) preferences and sends me notifications every morning.
+
+### ~~Learning~~/Rapid prototyping is fun
+
+I wanted to see how quickly I could get an MVP live (~1 hour of development) and wanted to setup the project to allow quick iterations for new features. I can now rapidly add new features; usually in a single prompt + a review when it's done. My deployment pipeline gives me the confidence that everything still works.
+
+# How
+
+Minimalistic stack built on Cloudflare.
 
 ## Stack
 
-Vite + React 19 SPA and a Hono API served by one Cloudflare Worker; in-app Google
-OAuth sign-in (`arctic`) with D1-backed sessions; D1 (Drizzle) for storage;
-Workers AI for filtering; Zod contracts in `shared/`; Terraform for infra (prod
-D1, custom domain); Playwright e2e; a single `pnpm check` gate enforced as the
-pre-commit hook.
+- React SPA + Hono API + Zod
+- Cloudflare Workers
+- Google OAuth sign-in
+- D1 + Drizzle
+- Algolia HN API
+- Workers AI for filtering (Llama 3.3 70B)
+- Terraform
+- Github Actions
+- Playwright + Vitest
+- Telegram bot (via one-click connect link)
 
-## Develop
+## Optimized for LLMs
+
+Strict guardrails, `pnpm check` gate covers everything: format, lint, typecheck, knip, jscpd, terraform, test unit + E2E.
+
+Everything can be run locally and in LLMs' cloud containers. E2E Tests run in <10s on your device.
+
+Scattered `CLAUDE.md` throughout codebase which contain context relevant ONLY to that area.
+
+Review loops: LLM is instructed to validate its own implementation proposal, then asks user for confirmation. When code is written, a code review loop is initiated. See [justly-skilled](https://github.com/JustWallage/justly-skilled).
+
+## Fully ephemeral E2E stage in pipeline
+
+The pipeline constructs a temporary instance of the full app + an empty D1. Runs the E2E tests againsts it, then discards. So I can safely run multiple E2E stages in parallel without disturbing each other.
+
+## Security
+
+Sessions are opaque random tokens stored SHA-256 hash; sign-in is Google OAuth. Cloudflare Turnstile (anti bot protection). Feed refresh rate-limited per user to bound Workers AI cost. Strict CSP (`public/_headers`) + HSTS, `X-Frame-Options`, nosniff and a referrer policy, and state-changing requests are Origin-checked on top of the SameSite cookie.
+
+# DIY
+
+Feel free to tryout this app yourself:
 
 ```sh
 pnpm install
 cp .dev.vars.example .dev.vars   # local identity + test token
 pnpm dev                         # http://localhost:5173
-pnpm check                       # format, lint, types, knip, jscpd, terraform, unit tests
+pnpm check                       # format, lint, types, knip, jscpd, terraform, unit + e2e tests
 pnpm test:e2e:setup              # once: node deps + Chromium binary (no apt/sudo)
 pnpm test:e2e                    # Playwright
 ```
 
-`pnpm dev` (local) hits the **real** Hacker News + Workers AI (so you can debug
-the live pipeline); the Workers AI binding proxies to the real service, so run
-`wrangler login` first. **e2e is hermetic** — it uses deterministic fakes (canned
-stories + a keyword filter), no network or cost. Trigger a run with the Refresh
-button or `await fetch("/api/digest/run", { method: "POST" })`.
-
-## Pages
-
-- **`/`** — your curated feed.
-- **`/preferences`** — your signed-in identity, a Log out button, a big plain-text
-  box describing what you want to read, and a Generate start command button for
-  linking Telegram.
-
-Unauthenticated visitors get a "Sign in with Google" screen.
-
-## Telegram bot
-
-Link a Telegram chat (Generate start command → send the bot `/start <code>`) to
-manage the app from chat: `/set_preferences`, `/cur_preferences`, and up to three
-`/daily_time HH:MM` slots. Each slot re-runs the digest and pushes the fresh
-picks to the chat. Setup is in [docs/BOOTSTRAP.md](docs/BOOTSTRAP.md).
-
-## Security
-
-Built to be opened to the public. Sessions are opaque random tokens stored only
-as their SHA-256 hash; sign-in is Google OAuth (PKCE + state, `email_verified`
-enforced) gated by Cloudflare Turnstile against bots. The on-demand feed refresh
-is rate-limited per user to bound Workers AI cost. Responses carry a strict CSP
-(`public/_headers`) plus HSTS, `X-Frame-Options`, nosniff and a referrer policy,
-and state-changing requests are Origin-checked on top of the SameSite cookie. See
-the audit in [docs/reports/](docs/reports/).
+`pnpm dev` (local) hits the **real** Hacker News + Workers AI (so you can debug the live pipeline); the Workers AI binding proxies to the real service, so run `wrangler login` first. **e2e is hermetic** — deterministic fakes (canned stories + a keyword filter), no network or cost.
 
 ## Setup & deploy
 
 One-time cloud setup is in [docs/BOOTSTRAP.md](docs/BOOTSTRAP.md). Pushing to
 `main` runs the full pipeline (checks → terraform → ephemeral E2E → deploy).
-Future ideas live in [docs/BACKLOG.md](docs/BACKLOG.md); the authoritative
-design is [docs/superpowers/specs/2026-06-17-news-design.md](docs/superpowers/specs/2026-06-17-news-design.md).
