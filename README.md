@@ -14,7 +14,7 @@ I wanted to see how quickly I could get an MVP live (~1 hour of development) and
 
 # How
 
-Minimalistic stack built on Cloudflare.
+Minimalistic stack built on Cloudflare. Focus on AI driven development with strict guardrails. Confident deployments because of the deployment pipeline.
 
 ## Stack
 
@@ -31,13 +31,12 @@ Minimalistic stack built on Cloudflare.
 
 ## Optimized for LLMs
 
-Strict guardrails, `pnpm check` gate covers everything: format, lint, typecheck, knip, jscpd, terraform, test unit + E2E.
-
-Everything can be run locally and in LLMs' cloud containers. E2E Tests run in <10s on your device.
-
-Scattered `CLAUDE.md` throughout codebase which contain context relevant ONLY to that area.
-
-Review loops: LLM is instructed to validate its own implementation proposal, then asks user for confirmation. When code is written, a code review loop is initiated. See [justly-skilled](https://github.com/JustWallage/justly-skilled).
+- Strict guardrails
+  - `pnpm check` gate: format, lint, typecheck, knip, jscpd, terraform, unit tests
+  - E2E Tests run in <10s on device/container
+- Everything can be run locally and in LLMs' cloud containers
+- Scattered `CLAUDE.md` throughout codebase which contain context relevant ONLY to that area (added to LLM context automatically)
+- Review loops: LLM is instructed to validate its own implementation proposal, then asks user for confirmation. When code is written, a code review loop is initiated. See [justly-skilled](https://github.com/JustWallage/justly-skilled).
 
 ## Fully ephemeral E2E stage in pipeline
 
