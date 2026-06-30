@@ -39,11 +39,8 @@ export async function loadFeed(db: Db, userEmail: string): Promise<Story[]> {
   return rows.map(toStory);
 }
 
-// The owner's current feed for the anonymous public demo: the SAME query +
-// ordering as loadFeed, mapped to the public-safe projection, plus the owner's
-// preferences text (what the feed is filtered against) and the latest curatedAt
-// for the "last refreshed X" line (null when the owner has none).
-// Reads stored curations + preferences only — never runs a digest / Workers AI.
+// Reads stored curations + preferences only — never runs the AI digest, so an
+// anonymous demo hit can't burn the Neuron budget.
 export async function loadPublicFeed(
   db: Db,
   ownerEmail: string,

@@ -4,7 +4,6 @@ import { curations, preferences, stories } from "../../db/schema";
 import { getDb } from "../lib/db";
 import { app } from "../index";
 
-// The test pool runs in the e2e env, so OWNER_EMAIL is the seeded demo account.
 const OWNER = env.OWNER_EMAIL;
 const OTHER = "someone-else@news.test";
 const TIME = new Date("2026-06-20T10:00:00.000Z");
@@ -43,8 +42,6 @@ describe("public demo feed", () => {
       { userEmail: OTHER, storyId: 1, relevanceScore: 99, reason: "other", curatedAt: T2, current: true, openedAt: null }, // prettier-ignore
     ]);
 
-    // No auth headers: the endpoint is outside /api, so it serves the owner feed
-    // regardless of the caller.
     const res = await app.request("/public/feed", {}, env);
     expect(res.status).toBe(200);
 
@@ -54,12 +51,10 @@ describe("public demo feed", () => {
       lastCuratedAt: string | null;
     }>();
 
-    // Only the owner's current curations, ordered by relevance desc.
     expect(body.stories.map((s) => s.id)).toEqual([1, 2]);
     expect(body.preferences).toBe("rust and self-hosting");
     expect(body.lastCuratedAt).toBe(T2.toISOString());
 
-    // Exactly the public fields — no per-user curation fields leak.
     expect(Object.keys(body.stories[0] ?? {}).sort()).toEqual(
       ["by", "comments", "id", "score", "time", "title", "url"].sort(),
     );

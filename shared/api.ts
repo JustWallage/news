@@ -59,10 +59,8 @@ export type Story = z.infer<typeof storySchema>;
 export const storyListSchema = z.object({ stories: z.array(storySchema) });
 export type StoryList = z.infer<typeof storyListSchema>;
 
-// The public demo feed (GET /public/feed) is served WITHOUT a session, so it
-// exposes only HN-public story fields — never the per-user curation fields
-// (openedAt, relevanceScore, reason). Derived from storySchema so it can never
-// drift into leaking a field a future storySchema change adds.
+// Public, unauthenticated projection: HN-public fields only, never the per-user
+// curation fields (openedAt/relevanceScore/reason).
 export const publicStorySchema = storySchema.pick({
   id: true,
   title: true,
@@ -74,10 +72,6 @@ export const publicStorySchema = storySchema.pick({
 });
 export type PublicStory = z.infer<typeof publicStorySchema>;
 
-// `preferences` is the owner's plain-text interests blob (empty when unset),
-// shown on the demo so visitors see what the feed is filtered against.
-// lastCuratedAt is the owner's latest curatedAt, for the "last refreshed X" line
-// (null when the owner has no current curations).
 export const demoFeedSchema = z.object({
   stories: z.array(publicStorySchema),
   preferences: z.string(),

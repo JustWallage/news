@@ -66,9 +66,8 @@ app.route("/api/telegram", telegramRoutes);
 // middleware. Same for the public demo feed and the Telegram webhook below.
 app.route("/auth", authRoutes);
 
-// The public demo feed is read by anonymous visitors, so it sits outside the
-// auth + deps middleware: no session, and structurally no access to the AI deps
-// (it reads stored curations only).
+// Outside /api so it has no session and no AI deps (the deps middleware is
+// /api-only) — that is what keeps the anonymous demo from reaching Workers AI.
 app.route("/public", publicRoutes);
 
 // The Telegram webhook cannot present a session, so it sits outside the auth +

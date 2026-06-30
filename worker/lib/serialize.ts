@@ -37,8 +37,6 @@ export function toStory(row: FeedRow): Story {
   });
 }
 
-// The public-safe projection for the anonymous demo feed: HN-public fields only,
-// never the per-user curation fields.
 export function toPublicStory(
   row: Pick<
     FeedRow,

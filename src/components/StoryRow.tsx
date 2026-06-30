@@ -2,9 +2,8 @@ import type { Story } from "@shared/api";
 import { hnItemUrl, hostname, relativeTime, safeHref } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-// Accepts the structural subset it actually renders so the public demo feed can
-// reuse it with a PublicStory (no openedAt/curation fields) — onOpen is optional
-// because the anonymous demo is read-only (no open-tracking).
+// Props are a structural subset of Story so the public demo can reuse this with
+// a PublicStory; onOpen is optional (the demo is read-only).
 export function StoryRow({
   story,
   rank,

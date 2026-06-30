@@ -1,9 +1,8 @@
 import { test as base, expect } from "@playwright/test";
 import { test } from "./fixtures";
 
-// OWNER_EMAIL in the e2e env (see wrangler.jsonc) — a fixed seeded account,
-// distinct from each test's random user. This is the ONLY spec that touches it,
-// so the shared/persisted owner row never races another test.
+// OWNER_EMAIL in the e2e env. The owner account is shared and persisted, so this
+// must stay the ONLY spec that touches it, or parallel runs will race.
 const OWNER = "owner@news.test";
 const ownerHeaders = {
   "X-Test-User-Email": OWNER,
@@ -14,17 +13,15 @@ test("the public demo serves the owner's stored feed without re-running the AI f
   page,
   request,
 }) => {
-  // Seed the owner's stored feed as the owner: prefs "rust" + a digest run →
-  // the fake AI keeps only the Rust story.
   await request.put("/api/preferences", {
     data: { text: "rust" },
     headers: ownerHeaders,
   });
   await request.post("/api/digest/run", { headers: ownerHeaders });
 
-  // Change the owner's prefs to "bitcoin" WITHOUT a digest run. If the demo path
-  // re-ran the AI filter it would re-curate to Bitcoin; reading stored curations
-  // only, it must keep showing Rust.
+  // Change prefs to "bitcoin" WITHOUT re-running the digest: if /demo re-ran the
+  // AI filter the feed would flip to Bitcoin, so a still-Rust feed proves it
+  // reads stored curations only.
   await request.put("/api/preferences", {
     data: { text: "bitcoin" },
     headers: ownerHeaders,
@@ -37,21 +34,17 @@ test("the public demo serves the owner's stored feed without re-running the AI f
   ).toBeVisible();
   await expect(page.getByText(/Bitcoin hits a new all-time high/)).toBeHidden();
 
-  // Read-only demo framing, no Refresh control.
   await expect(page.getByText(/These are my picks/)).toBeVisible();
   await expect(page.getByText(/Last refreshed/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Refresh" })).toHaveCount(0);
 
-  // The owner's preferences are shown read-only (the latest "bitcoin" text,
-  // even though the stored feed still reflects the earlier "rust" curation).
   await expect(page.getByText(/Based on these preferences/)).toBeVisible();
   await expect(page.getByLabel(/Based on these preferences/)).toHaveValue(
     "bitcoin",
   );
 });
 
-// Bare Playwright test (no ./fixtures) → no auth headers → the SPA shows the
-// landing page, where the "Show live demo" button must lead to /demo.
+// Bare test (no ./fixtures) → no auth headers → the SPA shows the landing page.
 base("the landing page links to the live demo", async ({ page }) => {
   await page.goto("/");
   const demoLink = page.getByRole("button", { name: /Show live demo/i });

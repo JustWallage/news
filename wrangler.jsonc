@@ -5,8 +5,9 @@
   "compatibility_date": "2026-06-01",
   "assets": {
     "not_found_handling": "single-page-application",
-    // /telegram/* (bot webhook) and /auth/* (Google sign-in) live outside /api
-    // and must hit the worker rather than fall through to the SPA assets.
+    // /telegram/* (bot webhook), /auth/* (Google sign-in) and /public/* (the
+    // anonymous demo feed) live outside /api and must hit the worker rather than
+    // fall through to the SPA assets.
     // The /e/ /flags/ /array/ /static/ /s/ paths are PostHog's: on the
     // e.news.justwallage.nl proxy host they must reach the worker (which forwards
     // them to PostHog, see worker/lib/posthog-proxy.ts) instead of being served
@@ -17,8 +18,6 @@
       "/api/*",
       "/telegram/*",
       "/auth/*",
-      // /public/* is the anonymous demo feed (GET /public/feed) — outside /api so
-      // it needs no session; must hit the worker, not the SPA assets.
       "/public/*",
       "/e/*",
       "/flags/*",
@@ -47,9 +46,7 @@
     // Per-user cooldown (seconds) on POST /api/digest/run; 0 disables it so local
     // + e2e can run the digest repeatedly. Production sets a real window.
     "DIGEST_COOLDOWN_SECONDS": 0,
-    // The account whose stored feed GET /public/feed serves as the anonymous
-    // demo. Per-env (e2e points at a seeded test account) — widened to string in
-    // worker/env.ts since cf-typegen would otherwise narrow it to a literal.
+    // The account whose stored feed GET /public/feed serves as the anonymous demo.
     "OWNER_EMAIL": "just@wallage.nl",
   },
   "d1_databases": [
@@ -70,8 +67,7 @@
         "APP_URL": "http://localhost:5174",
         "TELEGRAM_BOT_USERNAME": "",
         "DIGEST_COOLDOWN_SECONDS": 0,
-        // The public-demo target for the hermetic suites: a fixed seeded test
-        // account, distinct from each test's random user (see e2e/demo.spec.ts).
+        // Fixed seeded account, distinct from each test's random user.
         "OWNER_EMAIL": "owner@news.test",
         // Local/hermetic default so the unit + local e2e suites can drive the bot
         // webhook (link/disconnect a chat). The Telegram client stays the no-op
@@ -117,8 +113,6 @@
         // spend); the front page is already cached 5 min and scheduled Telegram
         // digests are exempt.
         "DIGEST_COOLDOWN_SECONDS": 600,
-        // The owner account whose live feed GET /public/feed serves as the
-        // anonymous demo on the homepage.
         "OWNER_EMAIL": "just@wallage.nl",
       },
       "d1_databases": [

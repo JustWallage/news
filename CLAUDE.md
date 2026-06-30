@@ -43,26 +43,27 @@ docs/      BOOTSTRAP.md (manual setup), BACKLOG.md (future ideas)
   `pnpm worktree <branch-name>` (no `open` flag) and work there.
 - Every change that includes logic => add relevant e2e tests.
 - Every change: `pnpm check` green + relevant e2e coverage.
-- No comments unless absolutely necessary to understand non-obvious code, and
-  then keep them short and inline. Never write comments that explain a change,
-  restate what the code does, or narrate history — the diff and git do that.
+- Comments: default to NONE. The reader knows how to read code — never preface a
+  function, export, block, JSX element, or config key with a comment that just
+  says what it is or that it was added/changed. Before writing one, it must pass:
+  "would a competent reader get this WRONG, or have to dig through other files,
+  without it?" If not, delete it. When one is warranted, keep it to a short line
+  on the non-obvious WHY — a security boundary, an invariant, a type-system
+  workaround, a footgun — not the WHAT. Never narrate a change, restate the code,
+  or record history (the diff and git do that). Match each file's existing
+  comment density; don't sprinkle one comment per new line.
 - Keep [README.md](README.md) current for big changes only (new capabilities,
   shifts in architecture or workflow); skip it for small changes it never mentions.
 
 ## Docs standard — MUST keep updated
 
-Nested CLAUDE.md per package = AI context. Shared patterns → `docs/claude/`.
+Nested `CLAUDE.md` per package = AI context. Shared patterns in `docs/claude/`.
+Capture ONLY what AI gets wrong or must read code to learn: ownership (who owns what), non-obvious invariants/flows, cross-package contracts (events, topics, consumers), domain language (exact terms + forbidden synonyms), gotchas.
+Cut the rest — file listings, API signatures, anything `ls`/grep/types reveal. Rots fast; AI reads code quicker than stale prose.
 
-Content test — every line must pass: "would AI get this wrong, or need to read code first, without it?"
+Write style:
 
-Keep:
+- Note, not essay. One line per fact. Point to where it lives (`path` or grep term), don't transcribe code.
+- Current state only. Never write what code used to do, "no longer X", or "changed from Y" — only what is.
 
-1. Ownership — which package owns what
-2. Invariants code doesn't shout (digest selection rules, the DST cron guard, upsert behavior)
-3. Cross-package contracts — schema names, who consumes whom
-4. Domain language — exact terms + forbidden synonyms
-5. Gotchas — the AI binding seam, prod-only paths, idempotency traps
-
-Delete: file listings, API signatures, anything an ls/grep reveals or types imply. These rot, and AI reads code faster than stale prose.
-Brevity: note the invariant + where to grep — don't transcribe enumerations that live in code. Shorter > exhaustive.
-Rule: always update CLAUDE.md (or docs/claude/) in same commit when something from list above was changed. Stale doc worse than none. Reference shared docs by plain path, never `@`-import.
+RULE: changed behavior/invariant/contract/convention → update nearest CLAUDE.md (or `docs/claude/` doc) SAME commit. Stale doc worse than none. Reference shared docs by plain path, never `@`-import.
