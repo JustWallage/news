@@ -1,6 +1,14 @@
 # news
 
-A personal, AI-curated Hacker News front page, live at [news.justwallage.nl](https://news.justwallage.nl). Sign in with Google and get your own feed.
+A personal, AI-curated Hacker News front page, live at [news.justwallage.nl](https://news.justwallage.nl){:target="\_blank"}. Sign in with Google and get your own feed.
+
+<table>
+  <tr>
+    <td width="33%"><img src="docs/images/readme/news-home.png" alt="Curated feed" /></td>
+    <td width="33%"><img src="docs/images/readme/news-preferences.png" alt="Preferences" /></td>
+    <td width="33%"><img src="docs/images/readme/news-telegram.png" alt="Telegram digest" /></td>
+  </tr>
+</table>
 
 # Why
 
@@ -22,6 +30,7 @@ Minimalistic stack built on Cloudflare. Focus on AI driven development with stri
 - Cloudflare Workers
 - Google OAuth sign-in
 - D1 + Drizzle
+- Posthog analytics
 - Algolia HN API
 - Workers AI for filtering (Llama 3.3 70B)
 - Terraform
@@ -36,7 +45,7 @@ Minimalistic stack built on Cloudflare. Focus on AI driven development with stri
   - E2E Tests run in <10s on device/container
 - Everything can be run locally and in LLMs' cloud containers
 - Scattered `CLAUDE.md` throughout codebase which contain context relevant ONLY to that area (added to LLM context automatically)
-- Review loops: LLM is instructed to validate its own implementation proposal, then asks user for confirmation. When code is written, a code review loop is initiated. See [justly-skilled](https://github.com/JustWallage/justly-skilled).
+- Review loops: LLM is instructed to validate its own implementation proposal, then asks user for confirmation. When code is written, a code review loop is initiated. See [justly-skilled](https://github.com/JustWallage/justly-skilled){:target="\_blank"}.
 
 ## Fully ephemeral E2E stage in pipeline
 
