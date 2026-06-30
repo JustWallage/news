@@ -59,6 +59,26 @@ export type Story = z.infer<typeof storySchema>;
 export const storyListSchema = z.object({ stories: z.array(storySchema) });
 export type StoryList = z.infer<typeof storyListSchema>;
 
+// Public, unauthenticated projection: HN-public fields only, never the per-user
+// curation fields (openedAt/relevanceScore/reason).
+export const publicStorySchema = storySchema.pick({
+  id: true,
+  title: true,
+  url: true,
+  by: true,
+  score: true,
+  comments: true,
+  time: true,
+});
+export type PublicStory = z.infer<typeof publicStorySchema>;
+
+export const demoFeedSchema = z.object({
+  stories: z.array(publicStorySchema),
+  preferences: z.string(),
+  lastCuratedAt: z.iso.datetime().nullable(),
+});
+export type DemoFeed = z.infer<typeof demoFeedSchema>;
+
 // ---- Preferences ----
 
 export const preferencesSchema = z.object({

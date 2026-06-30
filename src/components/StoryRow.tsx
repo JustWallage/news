@@ -2,14 +2,19 @@ import type { Story } from "@shared/api";
 import { hnItemUrl, hostname, relativeTime, safeHref } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+// Props are a structural subset of Story so the public demo can reuse this with
+// a PublicStory; onOpen is optional (the demo is read-only).
 export function StoryRow({
   story,
   rank,
   onOpen,
 }: {
-  story: Story;
+  story: Pick<
+    Story,
+    "id" | "title" | "url" | "by" | "score" | "comments" | "time"
+  > & { openedAt?: Story["openedAt"] };
   rank: number;
-  onOpen: (id: number) => void;
+  onOpen?: (id: number) => void;
 }) {
   const href = safeHref(story.url);
   const target = href ?? hnItemUrl(story.id);
@@ -25,11 +30,11 @@ export function StoryRow({
           target="_blank"
           rel="noreferrer"
           onClick={() => {
-            onOpen(story.id);
+            onOpen?.(story.id);
           }}
           className={cn(
             "font-medium hover:underline",
-            story.openedAt !== null && "text-muted-foreground",
+            story.openedAt != null && "text-muted-foreground",
           )}
         >
           {story.title}

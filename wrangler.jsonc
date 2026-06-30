@@ -5,8 +5,9 @@
   "compatibility_date": "2026-06-01",
   "assets": {
     "not_found_handling": "single-page-application",
-    // /telegram/* (bot webhook) and /auth/* (Google sign-in) live outside /api
-    // and must hit the worker rather than fall through to the SPA assets.
+    // /telegram/* (bot webhook), /auth/* (Google sign-in) and /public/* (the
+    // anonymous demo feed) live outside /api and must hit the worker rather than
+    // fall through to the SPA assets.
     // The /e/ /flags/ /array/ /static/ /s/ paths are PostHog's: on the
     // e.news.justwallage.nl proxy host they must reach the worker (which forwards
     // them to PostHog, see worker/lib/posthog-proxy.ts) instead of being served
@@ -17,6 +18,7 @@
       "/api/*",
       "/telegram/*",
       "/auth/*",
+      "/public/*",
       "/e/*",
       "/flags/*",
       "/array/*",
@@ -44,6 +46,8 @@
     // Per-user cooldown (seconds) on POST /api/digest/run; 0 disables it so local
     // + e2e can run the digest repeatedly. Production sets a real window.
     "DIGEST_COOLDOWN_SECONDS": 0,
+    // The account whose stored feed GET /public/feed serves as the anonymous demo.
+    "OWNER_EMAIL": "just@wallage.nl",
   },
   "d1_databases": [
     {
@@ -63,6 +67,8 @@
         "APP_URL": "http://localhost:5174",
         "TELEGRAM_BOT_USERNAME": "",
         "DIGEST_COOLDOWN_SECONDS": 0,
+        // Fixed seeded account, distinct from each test's random user.
+        "OWNER_EMAIL": "owner@news.test",
         // Local/hermetic default so the unit + local e2e suites can drive the bot
         // webhook (link/disconnect a chat). The Telegram client stays the no-op
         // fake here (no TELEGRAM_BOT_TOKEN), so no message ever leaves the worker.
@@ -107,6 +113,7 @@
         // spend); the front page is already cached 5 min and scheduled Telegram
         // digests are exempt.
         "DIGEST_COOLDOWN_SECONDS": 600,
+        "OWNER_EMAIL": "just@wallage.nl",
       },
       "d1_databases": [
         {

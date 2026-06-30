@@ -13,6 +13,7 @@
 | `DIGEST_COOLDOWN_SECONDS`                       | var     | committed (0 local/e2e, 600 prod); widened to `number` in `env.ts`. Per-user cooldown on `POST /api/digest/run` (0 disables it, so the hermetic suite can run repeatedly)                                                                                                                                                                                                    |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` | secrets | prod-only; OPTIONAL on `Env` (declared in `env.ts`). Token presence flips `createDeps` to the real Telegram client; the webhook secret gates `/telegram/webhook` (fail closed). The e2e env sets a FIXED `TELEGRAM_WEBHOOK_SECRET` var (`e2e-webhook-secret`) so the hermetic suite can drive the webhook (link/disconnect) — telegram stays the no-op fake there (no token) |
 | `APP_URL`, `TELEGRAM_BOT_USERNAME`              | vars    | summary footer link; bot `@username` (no `@`) for `t.me` deep links — empty → link-code `url` is null. `TELEGRAM_BOT_USERNAME` is widened to `string` in `env.ts` (committed `""`, real in prod)                                                                                                                                                                             |
+| `OWNER_EMAIL`                                   | var     | committed, per-env (prod = the owner account, e2e = `owner@news.test`, local = `just@wallage.nl`); widened to `string` in `env.ts`. The account whose stored feed `GET /public/feed` serves as the anonymous homepage demo                                                                                                                                                   |
 
 ## Dependency injection (the ONLY env branch)
 
@@ -116,6 +117,23 @@ no `ENVIRONMENT`/`isTest` checks leak into logic, and there is no test-only rout
   (`saveTimezone` upsert) — both bodies validated by `telegramTimezoneSchema`.
   `minuteOfDayInTz` (`lib/time.ts`) is the zone-aware conversion the `*/5`
   due-check uses.
+
+## Public demo feed (`routes/public.ts`, `lib/feed.ts` `loadPublicFeed`)
+
+- `GET /public/feed` is the anonymous homepage demo (SPA `/demo`). Mounted on
+  `app.route("/public", ...)` in `index.ts` **outside `/api`**, like `/auth` and
+  the Telegram webhook: no session, and — critically — the `/api/*` deps
+  middleware never runs, so the route STRUCTURALLY cannot reach Workers AI. It
+  reads stored `curations` + `preferences` for `OWNER_EMAIL` only
+  (`loadPublicFeed`, the same query + ordering as `loadFeed`, plus
+  `loadPreferences`), so anonymous traffic can never trigger a digest / burn
+  Neurons. `/public/*` is in `assets.run_worker_first`.
+- The response is the `demoFeedSchema` contract (`shared/api.ts`): only HN-public
+  story fields (via `toPublicStory`), the owner's `preferences` text (what the
+  feed is filtered against — intentionally public on the demo), plus
+  `lastCuratedAt` (max `curatedAt`). The
+  per-user `openedAt`/`relevanceScore`/`reason` are NOT in the public projection.
+  The global `no-store` policy is left intact (no public-cache opt-in).
 
 ## Data model & invariants
 

@@ -1,8 +1,9 @@
 import { and, desc, eq } from "drizzle-orm";
-import type { Story } from "../../shared/api";
+import type { DemoFeed, Story } from "../../shared/api";
 import { curations, stories } from "../../db/schema";
 import type { Db } from "./db";
-import { toStory } from "./serialize";
+import { loadPreferences } from "./digest";
+import { toPublicStory, toStory } from "./serialize";
 
 // The user's curated stories (feed or archive) joined to the shared content
 // cache; the caller adds the ordering.
@@ -19,6 +20,7 @@ export function curatedStories(db: Db, userEmail: string, current: boolean) {
       relevanceScore: curations.relevanceScore,
       reason: curations.reason,
       openedAt: curations.openedAt,
+      curatedAt: curations.curatedAt,
     })
     .from(curations)
     .innerJoin(stories, eq(curations.storyId, stories.id))
@@ -35,4 +37,24 @@ export async function loadFeed(db: Db, userEmail: string): Promise<Story[]> {
     desc(stories.score),
   );
   return rows.map(toStory);
+}
+
+// Reads stored curations + preferences only — never runs the AI digest, so an
+// anonymous demo hit can't burn the Neuron budget.
+export async function loadPublicFeed(
+  db: Db,
+  ownerEmail: string,
+): Promise<DemoFeed> {
+  const rows = await curatedStories(db, ownerEmail, true).orderBy(
+    desc(curations.relevanceScore),
+    desc(stories.score),
+  );
+  const { text } = await loadPreferences(db, ownerEmail);
+  const lastCuratedAt =
+    rows.length === 0
+      ? null
+      : new Date(
+          Math.max(...rows.map((row) => row.curatedAt.getTime())),
+        ).toISOString();
+  return { stories: rows.map(toPublicStory), preferences: text, lastCuratedAt };
 }

@@ -25,15 +25,19 @@ import type { Deps } from "./lib/deps";
 // by the deploy workflow (like the Telegram bot creds): optional here, and their
 // joint absence simply leaves the Turnstile bot-gate off (local/e2e bypass it via
 // the ENVIRONMENT gate in `verifyTurnstile`).
+// OWNER_EMAIL is a committed var that differs per env (real account in prod,
+// seeded test account in e2e), so it is widened to string like TELEGRAM_BOT_USERNAME.
 export type Bindings = Omit<
   Env,
   | "ENVIRONMENT"
   | "TELEGRAM_BOT_USERNAME"
   | "TELEGRAM_WEBHOOK_SECRET"
   | "DIGEST_COOLDOWN_SECONDS"
+  | "OWNER_EMAIL"
 > & {
   ENVIRONMENT: string;
   TELEGRAM_BOT_USERNAME: string;
+  OWNER_EMAIL: string;
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_WEBHOOK_SECRET?: string;
   GOOGLE_CLIENT_ID?: string;

@@ -16,6 +16,16 @@
   to `/auth/login?cf-turnstile-response=…`; when null (local/e2e) it falls back to
   a plain button → `/auth/login`. PreferencesPage has a Log out button →
   `POST /auth/logout`.
+- `/demo` is a PUBLIC route OUTSIDE `AuthGate` (see `App.tsx`: `AuthGate` now
+  wraps only the `Layout` route element, so `/demo` renders for anyone).
+  `DemoPage` reads `GET /public/feed` (`demoFeedSchema`) — the owner's live feed
+  — and is READ-ONLY: it reuses `StoryRow` with no `onOpen` (no open-tracking)
+  and no Refresh. It also shows the owner's `preferences` in a read-only textarea
+  ("Based on these preferences:"), hidden when empty. The landing page's "Show
+  live demo" button links here.
+- `StoryRow` props are a structural subset of `Story` (+ optional `openedAt`,
+  optional `onOpen`) so the public demo can pass a `PublicStory`; the feed/archive
+  still pass a full `Story`.
 - `StoryRow` links go through `safeHref` (`lib/format.ts`): only http(s) story
   URLs are used as the anchor target, else it falls back to the HN item page —
   React does not block dangerous href schemes, so never bind `story.url` raw.

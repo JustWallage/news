@@ -4,6 +4,7 @@ import { AuthGate } from "@/components/AuthGate";
 import { Layout } from "@/components/Layout";
 import { analyticsEnabled, posthog } from "@/lib/analytics";
 import { ArchivePage } from "@/pages/ArchivePage";
+import { DemoPage } from "@/pages/DemoPage";
 import { HomePage } from "@/pages/HomePage";
 import { PreferencesPage } from "@/pages/PreferencesPage";
 
@@ -21,15 +22,21 @@ export function App() {
   return (
     <BrowserRouter>
       <Analytics />
-      <AuthGate>
-        <Routes>
-          <Route element={<Layout />}>
-            <Route index element={<HomePage />} />
-            <Route path="archive" element={<ArchivePage />} />
-            <Route path="preferences" element={<PreferencesPage />} />
-          </Route>
-        </Routes>
-      </AuthGate>
+      <Routes>
+        {/* Public, ungated: the owner's live demo feed for anonymous visitors. */}
+        <Route path="/demo" element={<DemoPage />} />
+        <Route
+          element={
+            <AuthGate>
+              <Layout />
+            </AuthGate>
+          }
+        >
+          <Route index element={<HomePage />} />
+          <Route path="archive" element={<ArchivePage />} />
+          <Route path="preferences" element={<PreferencesPage />} />
+        </Route>
+      </Routes>
     </BrowserRouter>
   );
 }
