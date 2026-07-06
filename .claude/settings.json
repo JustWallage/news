@@ -1,4 +1,32 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(pnpm check)",
+      "Bash(pnpm check:*)",
+      "Bash(pnpm fix)",
+      "Bash(pnpm test:unit)",
+      "Bash(pnpm test:e2e)",
+      "Bash(pnpm test:e2e:*)",
+      "Bash(pnpm vitest:*)",
+      "Bash(pnpm exec vitest:*)",
+      "Bash(pnpm exec playwright test:*)",
+      "Bash(pnpm exec prettier:*)",
+      "Bash(pnpm exec eslint:*)",
+      "Bash(pnpm exec tsc:*)",
+      "Bash(pnpm cf-typegen)",
+      "Bash(pnpm migrate:gen)",
+      "Bash(pnpm migrate:local)",
+      "Bash(pnpm migrate:local:*)",
+      "Bash(pnpm tf:init)",
+      "Bash(pnpm install)",
+      "Bash(pnpm dev:vars)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch --show-current)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
@@ -6,6 +34,17 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/format-file.sh"
           }
         ]
       }

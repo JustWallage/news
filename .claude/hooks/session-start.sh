@@ -32,3 +32,10 @@ if ! command -v terraform >/dev/null 2>&1; then
   echo "export PATH=\"$TF_DIR:\$PATH\"" >> "$CLAUDE_ENV_FILE"
   export PATH="$TF_DIR:$PATH"
 fi
+
+# Providers, or `check:tf` (and thus the pre-commit gate) fails on `validate`.
+# The cloudflare provider downloads from github.com releases (must be
+# egress-allowlisted). Non-fatal so a blocked download doesn't kill the hook.
+if [ ! -d iac/.terraform ]; then
+  pnpm tf:init || echo "WARN: terraform init failed — check:tf will fail until it succeeds" >&2
+fi

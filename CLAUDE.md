@@ -8,7 +8,7 @@ preferences blob, storing the matches in D1. Curation runs on demand (homepage
 Refresh / Telegram `/fetch`) and on a `*/5` cron that pushes a Telegram summary
 to each user at their configured slot.
 [SPEC.md](docs/superpowers/specs/2026-06-17-news-design.md) is the original design
-document; [docs/BACKLOG.md](docs/BACKLOG.md) holds deferred ideas.
+document; deferred ideas live in `docs/0-backlog/`.
 
 ## Structure
 
@@ -19,15 +19,22 @@ worker/    Hono app + scheduled (cron) handler. index.ts is the composition
 src/       React SPA (pages/, components/, hooks/, lib/)
 db/        Drizzle schema.ts + generated SQL migrations
 e2e/       Playwright specs + fixtures
-iac/       Terraform (prod D1, Cloudflare Access, custom domain)
+iac/       Terraform (prod D1 ONLY — see iac/CLAUDE.md)
 scripts/   bootstrap.sh (one-time cloud setup)
-docs/      BOOTSTRAP.md (manual setup), BACKLOG.md (future ideas)
+docs/      BOOTSTRAP.md (manual setup); feature-doc kanban 0-backlog/ →
+           1-in-progress/ → 3-done/ (99-deprecated/ = dropped) — move the
+           feature's doc when its state changes; specs/<feature>/index.md
+           holds each spec with its review-N / sa-validation-N companions
 ```
 
 ## Commands
 
 - `pnpm check` — THE gate: format, lint, types, knip, jscpd, terraform, unit tests.
   Must pass before any commit (it is the pre-commit hook). Never bypass it.
+- Fast loop while iterating (the full gate stays mandatory before commit):
+  `pnpm check:ts` (~9s); one unit file `pnpm vitest run worker/lib/<f>.test.ts`;
+  one e2e spec `pnpm exec playwright test e2e/<f>.spec.ts`; `pnpm fix`
+  auto-repairs format + lint.
 - `pnpm test:e2e` — Playwright; auto-starts its own dev server (port 5174).
 - `pnpm dev` — full-stack dev server (workerd with real D1) on port 5173.
 
@@ -40,7 +47,9 @@ docs/      BOOTSTRAP.md (manual setup), BACKLOG.md (future ideas)
 - knip fails on unused exports/files/deps: don't export "for later".
 - After changing `wrangler.jsonc`, run `pnpm cf-typegen` (also runs in check).
 - Before implementing a new feature, create an isolated worktree with
-  `pnpm worktree <branch-name>` (no `open` flag) and work there.
+  `pnpm worktree <branch-name>` (no `open` flag) and work there. Local
+  sessions only — remote/web agent sessions already run isolated on a
+  dedicated branch; skip the worktree there.
 - Every change that includes logic => add relevant e2e tests.
 - Every change: `pnpm check` green + relevant e2e coverage.
 - Comments: default to NONE. The reader knows how to read code — never preface a
@@ -57,7 +66,8 @@ docs/      BOOTSTRAP.md (manual setup), BACKLOG.md (future ideas)
 
 ## Docs standard — MUST keep updated
 
-Nested `CLAUDE.md` per package = AI context. Shared patterns in `docs/claude/`.
+Nested `CLAUDE.md` per package = AI context. Shared patterns in `docs/claude/`
+(create the dir on first use — it does not exist yet).
 Capture ONLY what AI gets wrong or must read code to learn: ownership (who owns what), non-obvious invariants/flows, cross-package contracts (events, topics, consumers), domain language (exact terms + forbidden synonyms), gotchas.
 Cut the rest — file listings, API signatures, anything `ls`/grep/types reveal. Rots fast; AI reads code quicker than stale prose.
 

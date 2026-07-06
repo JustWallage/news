@@ -22,6 +22,11 @@ Notes:
   **Refresh** button or `POST /api/digest/run`. The fake AI selects a canned
   story when its title contains a word from the prefs text, so prefs steer the
   feed (e.g. prefs "rust" → only the Rust story).
-- Mock 100 stories to hit D1 limits on e2e, thus chucking must work in pipeline test phase on real D1.
+- The fake HN front page serves ~100 stories (`worker/lib/fakes.ts`) so the
+  chunked D1 upserts (100-bound-param limit, see worker/CLAUDE.md) are
+  exercised against real D1 in the pipeline's ephemeral-e2e stage.
+- `pnpm dev:e2e` creates `.dev.vars` from `.dev.vars.example` when missing
+  (it holds the `TEST_AUTH_TOKEN` the e2e auth path checks — without it every
+  test fails on the unauthenticated landing page).
 - If you change the schema, delete `.wrangler/` so the local e2e D1 re-migrates;
   a stale local DB surfaces as `/api/*` 500s.

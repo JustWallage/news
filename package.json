@@ -15,8 +15,9 @@
     ]
   },
   "scripts": {
-    "dev": "pnpm migrate:local && vite",
-    "dev:e2e": "pnpm migrate:local:e2e && CLOUDFLARE_ENV=e2e vite --port 5174",
+    "dev": "pnpm dev:vars && pnpm migrate:local && vite",
+    "dev:e2e": "pnpm dev:vars && pnpm migrate:local:e2e && CLOUDFLARE_ENV=e2e vite --port 5174",
+    "dev:vars": "[ -f .dev.vars ] || cp .dev.vars.example .dev.vars",
     "build": "vite build",
     "preview": "vite preview",
     "wrangler:login": "wrangler login",
