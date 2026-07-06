@@ -1,14 +1,16 @@
 name: Branch pipeline
 
-# Feature branches opt in by putting "run-pipeline" in the commit title.
-# Runs checks + a full ephemeral E2E; never deploys to production.
+# PRs to main always run (checks + full ephemeral E2E; never deploys).
+# Branch pushes without a PR opt in by putting "run-pipeline" in the commit title.
 
 on:
   push:
     branches-ignore: [main]
+  pull_request:
+    branches: [main]
 
 concurrency:
-  group: branch-pipeline-${{ github.ref }}
+  group: branch-pipeline-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -19,9 +21,12 @@ jobs:
     steps:
       - id: parse
         env:
+          EVENT_NAME: ${{ github.event_name }}
           COMMIT_TITLE: ${{ github.event.head_commit.message }}
         run: |
-          if printf '%s' "$COMMIT_TITLE" | head -1 | grep -q "run-pipeline"; then
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif printf '%s' "$COMMIT_TITLE" | head -1 | grep -q "run-pipeline"; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -34,6 +39,9 @@ jobs:
 
   ephemeral-e2e:
     needs: check-and-build
+    # Fork PRs don't receive repo secrets, so the E2E stage can only run for
+    # same-repo branches (all pushes are same-repo by definition).
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     uses: ./.github/workflows/ephemeral-e2e.yml
     secrets:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
