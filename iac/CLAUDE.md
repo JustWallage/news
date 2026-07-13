@@ -6,9 +6,10 @@ else — the worker, its secrets, migrations, the **Workers custom domain**
 owned by Wrangler/CI; never add those to Terraform.
 
 The app is public: authentication is handled entirely in the worker (Google OAuth
-+ opaque session cookies — see `worker/CLAUDE.md`), so anyone with a verified
-+ Google account can sign in. Sign-in bot abuse is mitigated by Cloudflare
-+ Turnstile (a worker secret, not an Access/Terraform resource).
+
+- opaque session cookies — see `worker/CLAUDE.md`), so anyone with a verified
+- Google account can sign in. Sign-in bot abuse is mitigated by Cloudflare
+- Turnstile (a worker secret, not an Access/Terraform resource).
 
 The custom domain is NOT a Terraform resource on purpose: Terraform runs before
 the worker is deployed, so Wrangler creates it at deploy time (production
