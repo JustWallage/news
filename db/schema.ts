@@ -1,4 +1,5 @@
 import {
+  index,
   integer,
   primaryKey,
   sqliteTable,
@@ -91,7 +92,69 @@ export const digestRuns = sqliteTable("digest_runs", {
   lastRunAt: integer("last_run_at", { mode: "timestamp" }).notNull(),
 });
 
+// A user-created feed: its own AI-curation preferences (versioned like the
+// global `preferences` row) and up to three daily Telegram slots, interpreted in
+// the owner's `telegram.timezone`. `lastFetchedAt` doubles as the on-demand run
+// cooldown stamp.
+export const feeds = sqliteTable(
+  "feeds",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userEmail: text("user_email").notNull(),
+    title: text("title").notNull(),
+    preferencesText: text("preferences_text").notNull().default(""),
+    prefVersion: integer("pref_version").notNull().default(1),
+    slot1: integer("slot1"),
+    slot2: integer("slot2"),
+    slot3: integer("slot3"),
+    lastFetchedAt: integer("last_fetched_at", { mode: "timestamp" }),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  },
+  (t) => [index("feeds_user_email_idx").on(t.userEmail)],
+);
+
+export const feedSources = sqliteTable(
+  "feed_sources",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    feedId: integer("feed_id")
+      .notNull()
+      .references(() => feeds.id),
+    url: text("url").notNull(),
+    title: text("title").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  },
+  (t) => [uniqueIndex("feed_sources_feed_id_url_idx").on(t.feedId, t.url)],
+);
+
+// Fetched RSS items with their AI verdict inline (feeds are single-owner, so no
+// join table): `relevant`/`pref_version` mirror `curations`' sticky-verdict
+// reuse, `current` marks membership of the latest fetch, and `sentAt` is the
+// send-once guard — an item is delivered to Telegram at most once, ever.
+export const feedItems = sqliteTable(
+  "feed_items",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    feedId: integer("feed_id")
+      .notNull()
+      .references(() => feeds.id),
+    link: text("link").notNull(),
+    title: text("title").notNull(),
+    publishedAt: integer("published_at", { mode: "timestamp" }),
+    fetchedAt: integer("fetched_at", { mode: "timestamp" }).notNull(),
+    relevant: integer("relevant", { mode: "boolean" }).notNull().default(true),
+    relevanceScore: integer("relevance_score").notNull().default(0),
+    prefVersion: integer("pref_version").notNull().default(0),
+    current: integer("current", { mode: "boolean" }).notNull(),
+    sentAt: integer("sent_at", { mode: "timestamp" }),
+  },
+  (t) => [uniqueIndex("feed_items_feed_id_link_idx").on(t.feedId, t.link)],
+);
+
 export type StoryRow = typeof stories.$inferSelect;
 export type CurationRow = typeof curations.$inferSelect;
 export type PreferenceRow = typeof preferences.$inferSelect;
 export type TelegramRow = typeof telegram.$inferSelect;
+export type FeedRow = typeof feeds.$inferSelect;
+export type FeedSourceRow = typeof feedSources.$inferSelect;
+export type FeedItemRow = typeof feedItems.$inferSelect;

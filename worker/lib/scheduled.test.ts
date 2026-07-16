@@ -1,13 +1,25 @@
 import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { curations, preferences, stories, telegram } from "../../db/schema";
+import {
+  curations,
+  feedItems,
+  feedSources,
+  feeds,
+  preferences,
+  stories,
+  telegram,
+} from "../../db/schema";
 import { getDb } from "./db";
 import type { Deps } from "./deps";
 import type { AiFilter, StoryInput } from "./digest";
-import { fakeAiFilter } from "./fakes";
+import { fakeAiFilter, fakeRssClient } from "./fakes";
 import type { HnClient } from "./hn";
-import { sendDailyDigest, sendDueDigests } from "./scheduled";
+import {
+  sendDailyDigest,
+  sendDueDigests,
+  sendDueFeedDigests,
+} from "./scheduled";
 import type { TelegramClient } from "./telegram";
 import { minuteOfDayInTz } from "./time";
 
@@ -75,6 +87,9 @@ beforeEach(async () => {
   await db.delete(stories);
   await db.delete(preferences);
   await db.delete(telegram);
+  await db.delete(feedItems);
+  await db.delete(feedSources);
+  await db.delete(feeds);
 });
 
 describe("sendDailyDigest", () => {
@@ -88,7 +103,7 @@ describe("sendDailyDigest", () => {
 
     await sendDailyDigest(
       db,
-      { hn, ai, telegram: rec.telegram },
+      { hn, ai, rss: fakeRssClient, telegram: rec.telegram },
       USER,
       CHAT,
       APP,
@@ -111,7 +126,7 @@ describe("sendDueDigests", () => {
     const { hn, calls } = countingHn();
     const rec = recordingTelegram();
     return {
-      deps: { hn, ai, telegram: rec.telegram },
+      deps: { hn, ai, rss: fakeRssClient, telegram: rec.telegram },
       calls,
       sent: () => rec.sent.length,
     };
@@ -196,5 +211,103 @@ describe("sendDueDigests", () => {
 
     expect(d.calls()).toBe(0);
     expect(await db.select().from(stories)).toHaveLength(0);
+  });
+});
+
+describe("sendDueFeedDigests", () => {
+  const now = new Date("2026-06-17T06:05:00Z");
+  const minute = minuteOfDayInTz(now, "Europe/Amsterdam");
+
+  async function seedFeed(slot: number | null): Promise<number> {
+    const db = getDb(env);
+    const rows = await db
+      .insert(feeds)
+      .values({
+        userEmail: USER,
+        title: "Dev blogs",
+        preferencesText: "rust",
+        slot1: slot,
+        createdAt: now,
+      })
+      .returning({ id: feeds.id });
+    const id = rows[0]?.id ?? 0;
+    await db.insert(feedSources).values({
+      feedId: id,
+      url: "https://blogs.example.com/feed",
+      title: "Fake Feed",
+      createdAt: now,
+    });
+    return id;
+  }
+
+  function feedDeps(): {
+    deps: Deps;
+    sent: { chatId: number; text: string }[];
+  } {
+    const rec = recordingTelegram();
+    return {
+      deps: {
+        hn: countingHn().hn,
+        ai,
+        rss: fakeRssClient,
+        telegram: rec.telegram,
+      },
+      sent: rec.sent,
+    };
+  }
+
+  it("sends a due feed's new items once, then reports nothing new", async () => {
+    const db = getDb(env);
+    await db.insert(telegram).values({ userEmail: USER, chatId: CHAT });
+    await seedFeed(minute);
+
+    const first = feedDeps();
+    await sendDueFeedDigests(db, first.deps, APP, now);
+    expect(first.sent).toHaveLength(1);
+    expect(first.sent[0]?.chatId).toBe(CHAT);
+    expect(first.sent[0]?.text).toContain("Rust in the kernel");
+    expect(first.sent[0]?.text).not.toContain("Sample article");
+    expect(first.sent[0]?.text).toContain(`${APP}/feeds`);
+
+    // The same item is never delivered twice, even though it is still current.
+    const second = feedDeps();
+    await sendDueFeedDigests(db, second.deps, APP, now);
+    expect(second.sent).toHaveLength(1);
+    expect(second.sent[0]?.text).toContain("No new items");
+    expect(second.sent[0]?.text).not.toContain("Rust in the kernel");
+  });
+
+  it("skips feeds that are not due or whose owner has no chat", async () => {
+    const db = getDb(env);
+    await db.insert(telegram).values({ userEmail: USER, chatId: CHAT });
+    await seedFeed(minute + 5);
+    const notDue = feedDeps();
+    await sendDueFeedDigests(db, notDue.deps, APP, now);
+    expect(notDue.sent).toHaveLength(0);
+
+    await db.delete(telegram).where(eq(telegram.userEmail, USER));
+    await db.update(feeds).set({ slot1: minute });
+    const noChat = feedDeps();
+    await sendDueFeedDigests(db, noChat.deps, APP, now);
+    expect(noChat.sent).toHaveLength(0);
+  });
+
+  it("matches the feed slot in the owner's timezone", async () => {
+    const db = getDb(env);
+    const nyMinute = minuteOfDayInTz(now, "America/New_York");
+    await db.insert(telegram).values({
+      userEmail: USER,
+      chatId: CHAT,
+      timezone: "America/New_York",
+    });
+    await seedFeed(minute);
+    const wrongZone = feedDeps();
+    await sendDueFeedDigests(db, wrongZone.deps, APP, now);
+    expect(wrongZone.sent).toHaveLength(0);
+
+    await db.update(feeds).set({ slot1: nyMinute });
+    const rightZone = feedDeps();
+    await sendDueFeedDigests(db, rightZone.deps, APP, now);
+    expect(rightZone.sent).toHaveLength(1);
   });
 });

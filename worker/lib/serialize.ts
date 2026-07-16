@@ -1,6 +1,9 @@
+import type { FeedItemRow } from "../../db/schema";
 import {
+  feedItemSchema,
   publicStorySchema,
   storySchema,
+  type FeedItem,
   type PublicStory,
   type Story,
 } from "../../shared/api";
@@ -34,6 +37,17 @@ export function toStory(row: FeedRow): Story {
     relevanceScore: row.relevanceScore,
     reason: row.reason,
     openedAt: row.openedAt === null ? null : row.openedAt.toISOString(),
+  });
+}
+
+export function toFeedItem(row: FeedItemRow): FeedItem {
+  return feedItemSchema.parse({
+    id: row.id,
+    title: row.title,
+    url: row.link,
+    publishedAt:
+      row.publishedAt === null ? null : row.publishedAt.toISOString(),
+    relevanceScore: row.relevanceScore,
   });
 }
 

@@ -48,6 +48,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",
+    "feedsmith": "^2.9.6",
     "hono": "^4.12.25",
     "posthog-js": "^1.393.5",
     "react": "^19.2.7",

@@ -41,6 +41,8 @@ function countingHn(): { hn: HnClient; fetches: () => number } {
   };
 }
 
+const noFeedItems: AiFilter["selectFeedItems"] = () => Promise.resolve([]);
+
 const keywordFilter = (needle: string): AiFilter => ({
   select: (_prefs, list) =>
     Promise.resolve(
@@ -50,6 +52,7 @@ const keywordFilter = (needle: string): AiFilter => ({
         score: 80,
       })),
     ),
+  selectFeedItems: noFeedItems,
 });
 
 // Records how many stories it was asked to evaluate on each run.
@@ -66,6 +69,7 @@ function countingFilter(needle: string): {
         seen.push(list.length);
         return inner.select(prefs, list);
       },
+      selectFeedItems: noFeedItems,
     },
   };
 }
@@ -211,7 +215,10 @@ describe("runDigest", () => {
       db,
       {
         hn: countingHn().hn,
-        ai: { select: () => Promise.reject(new Error("AI must not run")) },
+        ai: {
+          select: () => Promise.reject(new Error("AI must not run")),
+          selectFeedItems: noFeedItems,
+        },
       },
       "   ",
       0,

@@ -1,11 +1,23 @@
-import type { ZodType } from "zod";
+import { z, type ZodType } from "zod";
 
-class ApiRequestError extends Error {
+export class ApiRequestError extends Error {
   constructor(
     public readonly status: number,
     message: string,
   ) {
     super(message);
+  }
+}
+
+const errorBodySchema = z.object({ error: z.string() });
+
+// The worker's error responses carry a user-safe `{ error }` message; surface
+// it when present so callers can show it verbatim.
+async function errorMessage(path: string, res: Response): Promise<string> {
+  try {
+    return errorBodySchema.parse(await res.json()).error;
+  } catch {
+    return `Request to ${path} failed (${String(res.status)})`;
   }
 }
 
@@ -17,10 +29,7 @@ export async function apiFetch<T>(
 ): Promise<T> {
   const res = await fetch(path, init);
   if (!res.ok) {
-    throw new ApiRequestError(
-      res.status,
-      `Request to ${path} failed (${res.status})`,
-    );
+    throw new ApiRequestError(res.status, await errorMessage(path, res));
   }
   return schema.parse(await res.json());
 }

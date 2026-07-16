@@ -5,6 +5,7 @@ import {
   stories,
   type StoryRow,
 } from "../../db/schema";
+import { chunk } from "./chunk";
 import { sha256Hex } from "./crypto";
 import type { Db } from "./db";
 import type { HnClient } from "./hn";
@@ -33,9 +34,21 @@ export interface Verdict {
   score: number;
 }
 
+// A user-feed item as presented to the AI: title + link domain only (per the
+// feeds contract), with a caller-assigned id — new items have no DB id yet.
+export interface FeedItemCandidate {
+  id: number;
+  title: string;
+  domain: string;
+}
+
 /** The external dependency seam for relevance filtering (Workers AI in prod). */
 export interface AiFilter {
   select(prefs: string, stories: StoryInput[]): Promise<Verdict[]>;
+  selectFeedItems(
+    prefs: string,
+    items: FeedItemCandidate[],
+  ): Promise<Verdict[]>;
 }
 
 const UNFILTERED_FALLBACK = 30;
@@ -48,14 +61,6 @@ const CURATION_CHUNK = 10;
 // Rate-limit the upstream HN fetch: within this window of the last fetch, reuse
 // the cached front-page snapshot instead of hitting HN again.
 const RATE_LIMIT_MS = 5 * 60 * 1000;
-
-function chunk<T>(items: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < items.length; i += size) {
-    out.push(items.slice(i, i + size));
-  }
-  return out;
-}
 
 function toStoryInput(row: StoryRow): StoryInput {
   return {

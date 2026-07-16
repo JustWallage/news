@@ -10,6 +10,7 @@ import { authMiddleware } from "./middleware/auth";
 import { originGuard } from "./middleware/csrf";
 import { authRoutes } from "./routes/auth";
 import { digestRoutes } from "./routes/digest";
+import { feedsRoutes } from "./routes/feeds";
 import { preferencesRoutes } from "./routes/preferences";
 import { publicRoutes } from "./routes/public";
 import { storiesRoutes } from "./routes/stories";
@@ -57,6 +58,7 @@ app.get("/api/me", (c) =>
   c.json(meSchema.parse({ email: c.get("userEmail") })),
 );
 app.route("/api/stories", storiesRoutes);
+app.route("/api/feeds", feedsRoutes);
 app.route("/api/preferences", preferencesRoutes);
 app.route("/api/digest", digestRoutes);
 app.route("/api/telegram", telegramRoutes);

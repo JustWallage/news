@@ -98,6 +98,68 @@ export const preferencesUpdateSchema = z.object({
 
 export const digestRunResultSchema = z.object({ count: z.int() });
 
+// ---- Feeds ----
+
+export const FEED_TITLE_MAX_LENGTH = 100;
+// Bounds the RSS fetch fan-out per run (Workers caps subrequests at 50).
+export const MAX_FEED_SOURCES = 10;
+
+export const feedSummarySchema = z.object({
+  id: z.int(),
+  title: z.string(),
+  preferencesText: z.string(),
+});
+
+export const feedListSchema = z.object({ feeds: z.array(feedSummarySchema) });
+
+const feedTitleSchema = z.string().trim().min(1).max(FEED_TITLE_MAX_LENGTH);
+
+export const feedCreateSchema = z.object({ title: feedTitleSchema });
+
+export const feedCreatedSchema = z.object({ id: z.int() });
+
+export const feedUpdateSchema = z.object({
+  title: feedTitleSchema,
+  preferencesText: z.string().max(PREFERENCES_MAX_LENGTH),
+});
+
+export const feedSourceSchema = z.object({
+  id: z.int(),
+  url: z.string(),
+  title: z.string(),
+});
+
+export const feedSourceCreateSchema = z.object({
+  url: z.string().refine(isHttpUrl, "must be an http(s) URL"),
+});
+
+export const feedDetailSchema = z.object({
+  id: z.int(),
+  title: z.string(),
+  preferencesText: z.string(),
+  sources: z.array(feedSourceSchema),
+  /** The three daily-digest slots as "HH:MM", null when unset. */
+  slots: z.array(z.string().nullable()).length(3),
+  /** Whether a Telegram chat is linked (slots only take effect when true). */
+  telegramLinked: z.boolean(),
+  lastFetchedAt: z.iso.datetime().nullable(),
+});
+
+export const feedItemSchema = z.object({
+  id: z.int(),
+  title: z.string(),
+  url: z.string(),
+  publishedAt: z.iso.datetime().nullable(),
+  /** 0–100 relevance from the AI filter (0 for the empty-preferences fallback). */
+  relevanceScore: z.int(),
+});
+export type FeedItem = z.infer<typeof feedItemSchema>;
+
+export const feedItemListSchema = z.object({
+  items: z.array(feedItemSchema),
+  lastFetchedAt: z.iso.datetime().nullable(),
+});
+
 // ---- Telegram ----
 
 export const telegramStatusSchema = z.object({

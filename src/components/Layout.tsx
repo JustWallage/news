@@ -21,6 +21,9 @@ function Header() {
           <NavLink to="/" end className={navLink}>
             top
           </NavLink>
+          <NavLink to="/feeds" className={navLink}>
+            feeds
+          </NavLink>
           <NavLink to="/archive" className={navLink}>
             archive
           </NavLink>

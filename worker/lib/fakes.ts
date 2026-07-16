@@ -1,5 +1,6 @@
-import type { AiFilter, StoryInput } from "./digest";
+import type { AiFilter, StoryInput, Verdict } from "./digest";
 import type { HnClient } from "./hn";
+import { RssFetchError, type ParsedRssFeed, type RssClient } from "./rss";
 import type { TelegramClient } from "./telegram";
 
 // Deterministic stand-ins for the Algolia HN API + Workers AI, used in every
@@ -94,24 +95,58 @@ export const fakeTelegramClient: TelegramClient = {
   },
 };
 
-// Marks a story relevant when its title contains any word (>= 3 chars) from the
+// Marks an item relevant when its title contains any word (>= 3 chars) from the
 // preferences text — predictable for tests, plausible for dev.
+function keywordVerdicts(
+  prefs: string,
+  items: { id: number; title: string }[],
+): Verdict[] {
+  const words = prefs
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((word) => word.length >= 3);
+  return items.map((item) => {
+    const title = item.title.toLowerCase();
+    const relevant = words.some((word) => title.includes(word));
+    return {
+      id: item.id,
+      relevant,
+      score: relevant ? 80 : 0,
+    };
+  });
+}
+
 export const fakeAiFilter: AiFilter = {
-  select: (prefs, stories) => {
-    const words = prefs
-      .toLowerCase()
-      .split(/\s+/)
-      .filter((word) => word.length >= 3);
-    return Promise.resolve(
-      stories.map((story) => {
-        const title = story.title.toLowerCase();
-        const relevant = words.some((word) => title.includes(word));
-        return {
-          id: story.id,
-          relevant,
-          score: relevant ? 80 : 0,
-        };
-      }),
-    );
+  select: (prefs, stories) => Promise.resolve(keywordVerdicts(prefs, stories)),
+  selectFeedItems: (prefs, items) =>
+    Promise.resolve(keywordVerdicts(prefs, items)),
+};
+
+// Canned RSS channel keyed off the source URL, so two sources in one feed yield
+// distinct item links. The two featured titles carry the same e2e keywords as
+// the fake HN stories; a URL containing "bad" fails like an unreachable feed.
+export const fakeRssClient: RssClient = {
+  fetch: (url) => {
+    if (url.includes("bad")) {
+      return Promise.reject(new RssFetchError("Could not reach that URL"));
+    }
+    const { hostname, origin } = new URL(url);
+    const featured = [
+      { title: "Rust in the kernel, one year in", slug: "rust" },
+      { title: "Bitcoin custody for grandmothers", slug: "bitcoin" },
+    ];
+    const filler = Array.from({ length: 12 }, (_unused, i) => ({
+      title: `Sample article ${i}`,
+      slug: `sample-${i}`,
+    }));
+    const feed: ParsedRssFeed = {
+      title: `Fake Feed (${hostname})`,
+      items: [...featured, ...filler].map((item, i) => ({
+        title: item.title,
+        link: `${origin}/articles/${item.slug}`,
+        publishedAt: new Date(Date.UTC(2026, 0, 1, 12, i)),
+      })),
+    };
+    return Promise.resolve(feed);
   },
 };

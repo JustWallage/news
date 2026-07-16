@@ -66,14 +66,17 @@ export function parseDailyTime(arg: string): number | "off" | null {
   return (Math.round((hours * 60 + minutes) / 5) * 5) % 1440;
 }
 
-// Persist the three daily-summary slots from the web UI. Each entry is "HH:MM"
-// (already validated by the schema) rounded to the nearest 5 minutes, or null to
-// clear that slot. Updates the existing row, so the chat must already be linked.
-export async function saveSlots(
-  db: Db,
-  userEmail: string,
-  slots: (string | null)[],
-): Promise<void> {
+// The three-slot shape shared by the telegram row (the HN digest) and each
+// user feed (its own daily digests).
+export interface SlotColumns {
+  slot1: number | null;
+  slot2: number | null;
+  slot3: number | null;
+}
+
+// Three "HH:MM" entries (already schema-validated) → minute-of-day columns,
+// rounded to the nearest 5 minutes; null clears that slot.
+export function slotMinutes(slots: (string | null)[]): SlotColumns {
   const minute = (value: string | null | undefined): number | null => {
     if (value === null || value === undefined) {
       return null;
@@ -81,18 +84,35 @@ export async function saveSlots(
     const parsed = parseDailyTime(value);
     return typeof parsed === "number" ? parsed : null;
   };
+  return {
+    slot1: minute(slots[0]),
+    slot2: minute(slots[1]),
+    slot3: minute(slots[2]),
+  };
+}
+
+/** The stored slot columns back as three "HH:MM" | null entries. */
+export function formatSlots(row: SlotColumns): (string | null)[] {
+  return [row.slot1, row.slot2, row.slot3].map((slot) =>
+    slot === null ? null : formatMinuteOfDay(slot),
+  );
+}
+
+// Persist the three daily-summary slots from the web UI. Updates the existing
+// row, so the chat must already be linked.
+export async function saveSlots(
+  db: Db,
+  userEmail: string,
+  slots: (string | null)[],
+): Promise<void> {
   await db
     .update(telegram)
-    .set({
-      slot1: minute(slots[0]),
-      slot2: minute(slots[1]),
-      slot3: minute(slots[2]),
-    })
+    .set(slotMinutes(slots))
     .where(eq(telegram.userEmail, userEmail));
 }
 
 /** True when any configured slot matches the given minute-of-day. */
-export function dueSlot(row: TelegramRow, minute: number): boolean {
+export function dueSlot(row: SlotColumns, minute: number): boolean {
   return [row.slot1, row.slot2, row.slot3].some((slot) => slot === minute);
 }
 
@@ -130,13 +150,10 @@ export async function loadTelegramStatus(
   userEmail: string,
 ): Promise<TelegramStatus> {
   const row = await loadByEmail(db, userEmail);
-  const slots = [row?.slot1, row?.slot2, row?.slot3].map((slot) =>
-    slot === null || slot === undefined ? null : formatMinuteOfDay(slot),
-  );
   return {
     linked: row?.chatId != null,
     chatLabel: row?.chatId == null ? null : chatLabel(row),
-    slots,
+    slots: row === null ? [null, null, null] : formatSlots(row),
     timezone: row?.timezone ?? null,
   };
 }

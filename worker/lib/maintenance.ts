@@ -1,5 +1,5 @@
-import { and, isNotNull, lt, lte } from "drizzle-orm";
-import { sessions, telegram } from "../../db/schema";
+import { and, eq, isNotNull, lt, lte } from "drizzle-orm";
+import { feedItems, sessions, telegram } from "../../db/schema";
 import type { Bindings } from "../env";
 import type { Db } from "./db";
 import { getDb } from "./db";
@@ -7,6 +7,10 @@ import { getDb } from "./db";
 // Runs once a day on the */5 cron (this UTC hour, minute 0). Keeps the housekeep
 // deletes off the hot path while bounding unbounded growth.
 const PURGE_HOUR_UTC = 3;
+
+// Relevant feed items are the feed's archive and are kept forever; only stale
+// never-relevant leftovers (kept for verdict reuse) age out.
+const FEED_ITEM_TTL_MS = 60 * 24 * 60 * 60 * 1000;
 
 // Delete sessions past their TTL and clear link codes past their expiry. Expired
 // rows are already ignored at lookup/consume time; this just stops them piling
@@ -21,6 +25,15 @@ export async function purgeExpired(db: Db, now: Date): Promise<void> {
       and(
         isNotNull(telegram.linkCodeExpiresAt),
         lt(telegram.linkCodeExpiresAt, now),
+      ),
+    );
+  await db
+    .delete(feedItems)
+    .where(
+      and(
+        eq(feedItems.relevant, false),
+        eq(feedItems.current, false),
+        lt(feedItems.fetchedAt, new Date(now.getTime() - FEED_ITEM_TTL_MS)),
       ),
     );
 }
