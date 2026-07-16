@@ -9,6 +9,10 @@ Trunk-based pipeline; reusable jobs via `workflow_call`.
   only `docs/`. A push mixing docs + any other path still deploys.
 - Feature branches run nothing unless the commit title contains `run-pipeline`
   → branch-pipeline.yml (checks + ephemeral E2E, no deploy).
+- Ephemeral E2E polls the auth-gated `/api/me` until it 200s BEFORE running
+  Playwright — a fresh workers.dev deploy and the after-deploy `TEST_AUTH_TOKEN`
+  secret propagate across edge colos asynchronously; hitting the URL too early
+  serves Cloudflare's holding page or a 401 (flaky failures). Don't drop it.
 - Ephemeral E2E deploys worker + D1 named `news-e2e-<run_id>`
   (`TEMPLATE_E2E_DB_ID` in wrangler.jsonc is sed-replaced) and ALWAYS tears both
   down, also on failure. The prod D1 id comes from the terraform job output and

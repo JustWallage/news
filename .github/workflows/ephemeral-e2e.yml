@@ -71,6 +71,31 @@ jobs:
       - name: Install Playwright browser
         run: pnpm playwright:install
 
+      # A fresh workers.dev deployment AND the just-put TEST_AUTH_TOKEN secret
+      # both propagate across edge colos asynchronously. Hitting the URL before
+      # they settle yields Cloudflare's "nothing here yet" holding page or a 401
+      # (token not yet live), which surfaced as flaky E2E failures. Poll the
+      # auth-gated /api/me (200 only once the worker is live AND the token has
+      # propagated) from the runner — same egress colo Playwright will use.
+      - name: Wait for the ephemeral deployment to be ready
+        env:
+          BASE_URL: https://${{ env.E2E_NAME }}.${{ secrets.WORKERS_DEV_SUBDOMAIN }}
+        run: |
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
+              -H "X-Test-User-Email: readiness@news.test" \
+              -H "X-Test-Auth: $TEST_AUTH_TOKEN" \
+              "$BASE_URL/api/me" || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "Deployment ready after attempt ${i}."
+              exit 0
+            fi
+            echo "Attempt ${i}: /api/me returned ${code}; retrying in 2s…"
+            sleep 2
+          done
+          echo "Deployment did not become ready in time." >&2
+          exit 1
+
       - name: Run E2E suite against the ephemeral deployment
         env:
           BASE_URL: https://${{ env.E2E_NAME }}.${{ secrets.WORKERS_DEV_SUBDOMAIN }}
