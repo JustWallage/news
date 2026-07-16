@@ -236,7 +236,12 @@ export async function runFeedFetch(
         domain: domainOf(c.link),
       })),
     );
-    const fresh = new Map(verdicts.map((v) => [v.id, v]));
+    const fresh = new Map(
+      verdicts.flatMap((v) => {
+        const candidate = toEvaluate[v.id];
+        return candidate === undefined ? [] : [[candidate.link, v] as const];
+      }),
+    );
     evaluated = candidates.flatMap((c) => {
       const prior = reusable.get(c.link);
       if (prior !== undefined) {
@@ -248,7 +253,7 @@ export async function runFeedFetch(
           },
         ];
       }
-      const verdict = fresh.get(toEvaluate.indexOf(c));
+      const verdict = fresh.get(c.link);
       return verdict === undefined
         ? []
         : [{ ...c, relevant: verdict.relevant, relevanceScore: verdict.score }];

@@ -162,10 +162,46 @@ export function parseFeedXml(body: string, sourceUrl: string): ParsedRssFeed {
     ];
   });
   const channelTitle = title?.trim() ?? "";
+  // Stable sort: newest first, undated items keep document order at the end —
+  // so the cap keeps the 50 newest, not the first 50 of an oldest-first feed.
+  const newestFirst = [...cleaned].sort(
+    (a, b) =>
+      (b.publishedAt?.getTime() ?? -Infinity) -
+      (a.publishedAt?.getTime() ?? -Infinity),
+  );
   return {
     title: channelTitle === "" ? new URL(sourceUrl).hostname : channelTitle,
-    items: cleaned.slice(0, MAX_ITEMS_PER_SOURCE),
+    items: newestFirst.slice(0, MAX_ITEMS_PER_SOURCE),
   };
+}
+
+// Enforce the byte cap WHILE streaming: Content-Length is attacker-controlled
+// (and absent on chunked responses), so buffering first and checking after
+// would defeat the guard. Exported for unit tests.
+export async function readBodyCapped(
+  res: Response,
+  maxBytes: number,
+): Promise<string> {
+  const reader: ReadableStreamDefaultReader<Uint8Array> | undefined =
+    res.body?.getReader();
+  if (reader === undefined) {
+    return "";
+  }
+  const decoder = new TextDecoder();
+  let text = "";
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      return text + decoder.decode();
+    }
+    bytes += value.byteLength;
+    if (bytes > maxBytes) {
+      await reader.cancel();
+      throw new RssFetchError("That feed is too large");
+    }
+    text += decoder.decode(value, { stream: true });
+  }
 }
 
 export const realRssClient: RssClient = {
@@ -188,10 +224,6 @@ export const realRssClient: RssClient = {
     if (length > MAX_BODY_BYTES) {
       throw new RssFetchError("That feed is too large");
     }
-    const body = await res.text();
-    if (body.length > MAX_BODY_BYTES) {
-      throw new RssFetchError("That feed is too large");
-    }
-    return parseFeedXml(body, url);
+    return parseFeedXml(await readBodyCapped(res, MAX_BODY_BYTES), url);
   },
 };

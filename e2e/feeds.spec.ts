@@ -1,5 +1,9 @@
 import type { APIRequestContext } from "@playwright/test";
-import { feedCreatedSchema, telegramLinkCodeSchema } from "@shared/api";
+import {
+  feedCreatedSchema,
+  feedDetailSchema,
+  telegramLinkCodeSchema,
+} from "@shared/api";
 import { expect, test } from "./fixtures";
 
 const WEBHOOK_SECRET = process.env.E2E_WEBHOOK_SECRET ?? "e2e-webhook-secret";
@@ -167,14 +171,38 @@ test("the archive keeps items that fell out of the current fetch", async ({
     preferences: "rust bitcoin",
     sourceHost: "one.example.com",
   });
-  const run = await request.post(`/api/feeds/${String(id)}/run`);
-  expect(run.ok()).toBe(true);
+  const firstRun = await request.post(`/api/feeds/${String(id)}/run`);
+  expect(firstRun.ok()).toBe(true);
+
+  // Swap the source for one on a different host (different item links): the
+  // first fetch's items drop out of the current feed but stay in the archive.
+  const detail = feedDetailSchema.parse(
+    await (await request.get(`/api/feeds/${String(id)}`)).json(),
+  );
+  const oldSource = detail.sources[0];
+  expect(oldSource).toBeDefined();
+  if (oldSource === undefined) {
+    return;
+  }
+  await request.delete(
+    `/api/feeds/${String(id)}/sources/${String(oldSource.id)}`,
+  );
+  const added = await request.post(`/api/feeds/${String(id)}/sources`, {
+    data: { url: "https://two.example.com/feed" },
+  });
+  expect(added.ok()).toBe(true);
+  const secondRun = await request.post(`/api/feeds/${String(id)}/run`);
+  expect(secondRun.ok()).toBe(true);
+
+  const rustTitle = "Rust in the kernel, one year in";
+  await page.goto(`/feeds/${String(id)}`);
+  await expect(page.getByText(rustTitle)).toHaveCount(1);
 
   await page.goto(`/feeds/${String(id)}/archive`);
-  await expect(page.getByText("Rust in the kernel, one year in")).toBeVisible();
-  await expect(
-    page.getByText("Bitcoin custody for grandmothers"),
-  ).toBeVisible();
+  await expect(page.getByText(rustTitle)).toHaveCount(2);
+  await expect(page.getByText("Bitcoin custody for grandmothers")).toHaveCount(
+    2,
+  );
   await expect(page.getByText("Sample article 0")).toBeHidden();
 });
 

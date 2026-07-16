@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RssFetchError, parseFeedXml } from "./rss";
+import { RssFetchError, parseFeedXml, readBodyCapped } from "./rss";
 
 const SOURCE = "https://blog.example.com/feed.xml";
 
@@ -87,6 +87,19 @@ describe("parseFeedXml", () => {
     expect(() => parseFeedXml("not xml at all", SOURCE)).toThrow(RssFetchError);
   });
 
+  it("keeps the newest items when capping an oldest-first feed", () => {
+    const many = Array.from(
+      { length: 60 },
+      (_unused, i) =>
+        `<item><title>Item ${String(i)}</title><link>https://blog.example.com/${String(i)}</link>` +
+        `<pubDate>${new Date(Date.UTC(2026, 0, 1 + i)).toUTCString()}</pubDate></item>`,
+    ).join("");
+    const feed = parseFeedXml(rss(many), SOURCE);
+    expect(feed.items).toHaveLength(50);
+    expect(feed.items[0]?.title).toBe("Item 59");
+    expect(feed.items.some((i) => i.title === "Item 5")).toBe(false);
+  });
+
   it("turns an unparseable date into null", () => {
     const feed = parseFeedXml(
       rss(
@@ -95,5 +108,38 @@ describe("parseFeedXml", () => {
       SOURCE,
     );
     expect(feed.items[0]?.publishedAt).toBeNull();
+  });
+});
+
+describe("readBodyCapped", () => {
+  function chunkedResponse(chunks: string[]): Response {
+    const encoder = new TextEncoder();
+    return new Response(
+      new ReadableStream({
+        start(controller) {
+          for (const chunk of chunks) {
+            controller.enqueue(encoder.encode(chunk));
+          }
+          controller.close();
+        },
+      }),
+    );
+  }
+
+  it("returns the full body when under the cap", async () => {
+    const body = await readBodyCapped(
+      chunkedResponse(["<rss>", "</rss>"]),
+      100,
+    );
+    expect(body).toBe("<rss></rss>");
+  });
+
+  it("aborts mid-stream as soon as the cap is exceeded", async () => {
+    // No Content-Length here (chunked stream) — the cap must fire anyway,
+    // before the whole body is buffered.
+    const chunks = Array.from({ length: 10 }, () => "x".repeat(64));
+    await expect(readBodyCapped(chunkedResponse(chunks), 200)).rejects.toThrow(
+      RssFetchError,
+    );
   });
 });
