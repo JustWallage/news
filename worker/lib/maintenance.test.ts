@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { sessions, telegram } from "../../db/schema";
+import { feedItems, feeds, sessions, telegram } from "../../db/schema";
 import { getDb } from "./db";
 import { purgeExpired } from "./maintenance";
 import { createSession } from "./session";
@@ -12,6 +12,8 @@ beforeEach(async () => {
   const db = getDb(env);
   await db.delete(sessions);
   await db.delete(telegram);
+  await db.delete(feedItems);
+  await db.delete(feeds);
 });
 
 describe("purgeExpired", () => {
@@ -71,5 +73,46 @@ describe("purgeExpired", () => {
 
     const rows = await db.select().from(telegram);
     expect(rows[0]?.linkCode).toBe("stillvalidcode00");
+  });
+
+  it("prunes only stale never-relevant feed items — the archive survives", async () => {
+    const db = getDb(env);
+    const now = new Date("2026-06-22T03:00:00Z");
+    const stale = new Date(now.getTime() - 61 * 24 * 60 * 60 * 1000);
+    const feedRows = await db
+      .insert(feeds)
+      .values({ userEmail: USER, title: "f", createdAt: now })
+      .returning({ id: feeds.id });
+    const feedId = feedRows[0]?.id ?? 0;
+    const item = (
+      link: string,
+      relevant: boolean,
+      current: boolean,
+      fetchedAt: Date,
+    ) => ({
+      feedId,
+      link,
+      title: link,
+      fetchedAt,
+      relevant,
+      current,
+    });
+    await db
+      .insert(feedItems)
+      .values([
+        item("stale-irrelevant", false, false, stale),
+        item("fresh-irrelevant", false, false, now),
+        item("stale-relevant-archive", true, false, stale),
+        item("stale-but-current", false, true, stale),
+      ]);
+
+    await purgeExpired(db, now);
+
+    const kept = (await db.select().from(feedItems)).map((r) => r.link).sort();
+    expect(kept).toEqual([
+      "fresh-irrelevant",
+      "stale-but-current",
+      "stale-relevant-archive",
+    ]);
   });
 });

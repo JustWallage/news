@@ -8,6 +8,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { useUser } from "@/components/AuthGate";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { SlotTimesEditor } from "@/components/SlotTimesEditor";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
@@ -17,7 +18,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCachedFetch } from "@/hooks/useCachedFetch";
@@ -29,27 +29,6 @@ const TIMEZONES = Intl.supportedValuesOf("timeZone");
 async function logout(): Promise<void> {
   await apiFetch("/auth/logout", okSchema, jsonInit("POST", {}));
   window.location.href = "/";
-}
-
-const SLOT_LABELS = ["First", "Second", "Third"];
-
-function TrashIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M3 6h18" />
-      <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
-      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-      <path d="M10 11v6M14 11v6" />
-    </svg>
-  );
 }
 
 function TelegramSection() {
@@ -333,61 +312,14 @@ function TelegramSection() {
               </select>
             </div>
 
-            <div className="space-y-2">
-              <Label>Times</Label>
-              <div className="space-y-2">
-                {slots.map((value, i) => {
-                  const slotLabel = SLOT_LABELS[i] ?? `Slot ${i + 1}`;
-                  const name = `${slotLabel} daily summary time`;
-                  const isSet = value !== "";
-                  return (
-                    <div key={name} className="flex items-center gap-3">
-                      <span className="w-16 text-muted-foreground">
-                        {slotLabel}
-                      </span>
-                      <Input
-                        type="time"
-                        step={300}
-                        value={value}
-                        aria-label={name}
-                        className={cn(
-                          "w-32",
-                          !isSet && "bg-muted/40 text-muted-foreground",
-                        )}
-                        onChange={(event) => {
-                          slotsDirty.current = true;
-                          setSlots(
-                            slots.map((slot, j) =>
-                              j === i ? event.target.value : slot,
-                            ),
-                          );
-                          setSlotStatus("idle");
-                        }}
-                      />
-                      {isSet ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          aria-label={`Clear ${name}`}
-                          onClick={() => {
-                            slotsDirty.current = true;
-                            setSlots(
-                              slots.map((slot, j) => (j === i ? "" : slot)),
-                            );
-                            setSlotStatus("idle");
-                          }}
-                        >
-                          <TrashIcon />
-                        </Button>
-                      ) : (
-                        <span className="text-muted-foreground">Not set</span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            <SlotTimesEditor
+              slots={slots}
+              onChange={(next) => {
+                slotsDirty.current = true;
+                setSlots(next);
+                setSlotStatus("idle");
+              }}
+            />
           </CardContent>
           <CardFooter className="gap-3">
             <Button onClick={saveSlots} disabled={slotStatus === "saving"}>

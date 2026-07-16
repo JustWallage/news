@@ -36,5 +36,18 @@ Rules:
   `userEmail`, `lastRunAt`) are auth/rate-limit state. `digest_runs` backs the
   per-user cooldown on `POST /api/digest/run`. Expired sessions + link codes are
   purged nightly by the cron (`worker/lib/maintenance.ts`).
+- `feeds`/`feed_sources`/`feed_items` are the user-feeds system (RSS sources +
+  per-feed AI curation), PER-USER via `feeds.user_email`. `feed_items` carries
+  the verdict inline (no join table — feeds are single-owner): `relevant`/
+  `pref_version` mirror `curations`' sticky-verdict reuse against
+  `feeds.pref_version` (bumped only on a real `preferences_text` change),
+  `current` = member of the latest fetch AND relevant, unique `(feed_id, link)`
+  dedupes across fetches and sources. `sent_at` is the send-once Telegram guard:
+  stamped when the item is delivered, never re-sent, preserved by the upsert.
+  Relevant items are the feed's archive and are never pruned; never-relevant
+  non-current ones age out after 60 days (`worker/lib/maintenance.ts`).
+  `feeds.last_fetched_at` doubles as the per-feed cooldown stamp for
+  `POST /api/feeds/:id/run`; `feeds.slot1-3` are minute-of-day like `telegram`'s
+  and are interpreted in the owner's `telegram.timezone`.
 - Timestamps are epoch integers via `{ mode: "timestamp" }` (surface as `Date`);
   `current`/`relevant` are `{ mode: "boolean" }` integers.

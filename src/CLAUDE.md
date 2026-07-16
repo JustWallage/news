@@ -49,6 +49,17 @@
   `tzDirty` ref, always shown) saves on change via `PUT /api/telegram/timezone`;
   the link-code POST also carries the selected zone, so the browser-detected
   default and the editor never diverge.
+- Feeds pages (`/feeds`, `/feeds/:feedId`, `/feeds/:feedId/archive`,
+  `/feeds/:feedId/settings`): `FeedContext`/`useFeed` belong to the HN feed —
+  feeds pages own their `useCachedFetch` state instead (the ArchivePage
+  pattern) and have their OWN Refresh (`POST /api/feeds/:id/run`; the header
+  Refresh stays HN-only). `FeedSwitcher` (in `FeedPage.tsx`) is the shared
+  top-bar select that navigates between feeds. `FeedItemRow` is the lean item
+  row (`StoryRow` is HN-shaped — don't reuse it). `SlotTimesEditor` is the
+  shared three-time-inputs editor (TelegramSection + feed settings); parents
+  own state/dirty/save. `ApiRequestError` is exported so callers can branch on
+  status (FeedPage shows a friendly 429) and carries the server's `{ error }`
+  message when present (feed settings shows it for add-source failures).
 - `components/ui/` is shadcn-generated (Base UI primitives, NOT Radix — pass
   `render={<a />}` plus `nativeButton={false}` for a link-button, not `asChild`).
   It is exempt from lint and knip; regenerate via `pnpm dlx shadcn@latest add`.

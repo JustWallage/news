@@ -118,6 +118,37 @@ no `ENVIRONMENT`/`isTest` checks leak into logic, and there is no test-only rout
   `minuteOfDayInTz` (`lib/time.ts`) is the zone-aware conversion the `*/5`
   due-check uses.
 
+## User feeds (`lib/feeds.ts`, `lib/rss.ts`, `routes/feeds.ts`)
+
+- Naming: `lib/feed.ts` is the HN feed loader ONLY; `lib/feeds.ts` is the
+  user-feeds domain (RSS sources → AI curation → items). Don't mix them.
+- `lib/rss.ts`: `RssClient { fetch(url) }` is the seam (`deps.rss`; fake in
+  e2e keyed off the URL, a URL containing "bad" fails). `parseFeedXml` uses
+  feedsmith + zod re-parse; drops titleless/non-http items, caps 50/source,
+  rejects bodies > 5 MB (user-supplied URLs). `RssFetchError.message` is
+  user-facing (the add-source route returns it).
+- `runFeedFetch` is the feeds twin of `curateForUser`: dedupe by link, reuse
+  verdicts at `feeds.prefVersion`, judge the rest via `ai.selectFeedItems`
+  (title + domain only; the AI pass runs BEFORE the upsert with synthetic
+  array-index ids — new items have no DB id yet), then one write pass sets
+  `current = relevant`. Empty prefs → everything relevant, AI-free. The upsert
+  never touches `sentAt` (send-once survives refetches).
+- `lib/ai.ts`: `FEED_SYSTEM_PROMPT` is a separate prompt over the SAME
+  batching/parsing core (`runFilter`); the HN `SYSTEM_PROMPT` and `select()`
+  stay byte-identical — `ai.test.ts` pins the HN contract.
+- Routes: every `/api/feeds/:id/*` handler goes through the ownership gate
+  (`loadFeedForUser`; unknown and foreign ids are the same 404).
+  `POST /:id/run` cooldown = `feeds.lastFetchedAt` + `DIGEST_COOLDOWN_SECONDS`
+  (no runs table; a scheduled run also pushes it back). Slots reuse
+  `telegramSlotsUpdateSchema` + `slotMinutes` and 409 until a chat is linked.
+- Cron: `runTelegramDigests` runs `sendDueDigests` then `sendDueFeedDigests`
+  SEQUENTIALLY (shared 50-subrequest budget per tick; feeds also sequential
+  with per-feed try/catch). A due feed refetches, then sends only `current AND
+sentAt IS NULL` items (capped `MAX_STORIES`) and stamps `sentAt` on exactly
+  the delivered ones — send-once, overflow rolls to the next slot; zero unsent
+  still sends the empty-case message. Due-ness = `dueSlot(feed, ...)` in the
+  OWNER's `telegram.timezone`.
+
 ## Public demo feed (`routes/public.ts`, `lib/feed.ts` `loadPublicFeed`)
 
 - `GET /public/feed` is the anonymous homepage demo (SPA `/demo`). Mounted on

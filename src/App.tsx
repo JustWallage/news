@@ -5,6 +5,10 @@ import { Layout } from "@/components/Layout";
 import { analyticsEnabled, posthog } from "@/lib/analytics";
 import { ArchivePage } from "@/pages/ArchivePage";
 import { DemoPage } from "@/pages/DemoPage";
+import { FeedArchivePage } from "@/pages/FeedArchivePage";
+import { FeedPage } from "@/pages/FeedPage";
+import { FeedSettingsPage } from "@/pages/FeedSettingsPage";
+import { FeedsPage } from "@/pages/FeedsPage";
 import { HomePage } from "@/pages/HomePage";
 import { PreferencesPage } from "@/pages/PreferencesPage";
 
@@ -33,6 +37,10 @@ export function App() {
           }
         >
           <Route index element={<HomePage />} />
+          <Route path="feeds" element={<FeedsPage />} />
+          <Route path="feeds/:feedId" element={<FeedPage />} />
+          <Route path="feeds/:feedId/archive" element={<FeedArchivePage />} />
+          <Route path="feeds/:feedId/settings" element={<FeedSettingsPage />} />
           <Route path="archive" element={<ArchivePage />} />
           <Route path="preferences" element={<PreferencesPage />} />
         </Route>

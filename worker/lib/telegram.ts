@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isHttpUrl, type Story } from "../../shared/api";
+import { isHttpUrl, type FeedItem, type Story } from "../../shared/api";
 
 // The external dependency seam for sending Telegram messages (the Bot API in
 // production, a no-op fake elsewhere — see lib/deps.ts).
@@ -47,7 +47,7 @@ export const updateSchema = z.object({
 });
 export type TelegramUpdate = z.infer<typeof updateSchema>;
 
-const MAX_STORIES = 15;
+export const MAX_STORIES = 15;
 
 // Escapes the five chars that matter in Telegram HTML mode, including the double
 // quote so an attacker-influenced URL can't break out of an href="" attribute.
@@ -105,4 +105,25 @@ export function formatDigestMessage(stories: Story[], appUrl: string): string {
   const extra = stories.length - shown.length;
   const tail = extra > 0 ? `\n\n…and ${extra} more` : "";
   return `🗞 ${stories.length} stories for you\n\n${blocks.join("\n\n")}${tail}${footer}`;
+}
+
+// The user-feed digest: one titled line per item. The caller passes only the
+// never-sent items (send-once), pre-capped at MAX_STORIES so it can stamp
+// exactly what was delivered; a due slot with nothing new still gets a message
+// (mirroring the HN empty case — a slot is an explicit opt-in to a daily ping).
+export function formatFeedDigestMessage(
+  feedTitle: string,
+  items: FeedItem[],
+  appUrl: string,
+): string {
+  const footer = `\n\n<a href="${appUrl}/feeds">Open the app</a>`;
+  const title = escapeHtml(feedTitle);
+  if (items.length === 0) {
+    return `No new items for ${title} today.${footer}`;
+  }
+  const lines = items.map((item) => {
+    const href = isHttpUrl(item.url) ? item.url : `${appUrl}/feeds`;
+    return `• <a href="${escapeHtml(href)}">${escapeHtml(item.title)}</a>`;
+  });
+  return `🗞 ${title}: ${plural(items.length, "new item")}\n\n${lines.join("\n")}${footer}`;
 }
