@@ -72,25 +72,38 @@ jobs:
         run: pnpm playwright:install
 
       # A fresh workers.dev deployment AND the just-put TEST_AUTH_TOKEN secret
-      # both propagate across edge colos asynchronously. Hitting the URL before
-      # they settle yields Cloudflare's "nothing here yet" holding page or a 401
-      # (token not yet live), which surfaced as flaky E2E failures. Poll the
-      # auth-gated /api/me (200 only once the worker is live AND the token has
-      # propagated) from the runner — same egress colo Playwright will use.
+      # both propagate across edge colos asynchronously, and the two halves go
+      # live INDEPENDENTLY: `/api/*` is `run_worker_first`, so the worker answers
+      # there while the ASSETS handler still returns Cloudflare's "nothing here
+      # yet" holding page — which is exactly what a browser loads first. Probing
+      # only /api/me therefore passed on attempt 1 and left the suite racing
+      # asset propagation for ~45s (Playwright asserting against the holding
+      # page). So probe BOTH surfaces, and require several consecutive successes:
+      # one 200 proves a single connection was served, not that the deployment
+      # settled. Polled from the runner, i.e. the egress Playwright will use.
       - name: Wait for the ephemeral deployment to be ready
         env:
           BASE_URL: https://${{ env.E2E_NAME }}.${{ secrets.WORKERS_DEV_SUBDOMAIN }}
         run: |
-          for i in $(seq 1 60); do
+          READY_STREAK=5
+          streak=0
+          for i in $(seq 1 90); do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
               -H "X-Test-User-Email: readiness@news.test" \
               -H "X-Test-Auth: $TEST_AUTH_TOKEN" \
               "$BASE_URL/api/me" || echo 000)
-            if [ "$code" = "200" ]; then
-              echo "Deployment ready after attempt ${i}."
-              exit 0
+            doc=$(curl -s --max-time 10 -H 'Cache-Control: no-cache' "$BASE_URL/" || true)
+            if [ "$code" = "200" ] && printf '%s' "$doc" | grep -q 'id="root"'; then
+              streak=$((streak + 1))
+              echo "Attempt ${i}: worker + assets ready (${streak}/${READY_STREAK})."
+              if [ "$streak" -ge "$READY_STREAK" ]; then
+                echo "Deployment ready and stable after attempt ${i}."
+                exit 0
+              fi
+            else
+              streak=0
+              echo "Attempt ${i}: /api/me=${code}, SPA document not served yet; retrying in 2s…"
             fi
-            echo "Attempt ${i}: /api/me returned ${code}; retrying in 2s…"
             sleep 2
           done
           echo "Deployment did not become ready in time." >&2

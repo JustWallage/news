@@ -9,10 +9,14 @@ Trunk-based pipeline; reusable jobs via `workflow_call`.
   only `docs/`. A push mixing docs + any other path still deploys.
 - Feature branches run nothing unless the commit title contains `run-pipeline`
   → branch-pipeline.yml (checks + ephemeral E2E, no deploy).
-- Ephemeral E2E polls the auth-gated `/api/me` until it 200s BEFORE running
-  Playwright — a fresh workers.dev deploy and the after-deploy `TEST_AUTH_TOKEN`
-  secret propagate across edge colos asynchronously; hitting the URL too early
-  serves Cloudflare's holding page or a 401 (flaky failures). Don't drop it.
+- Ephemeral E2E's readiness gate polls BOTH the auth-gated `/api/me` AND the SPA
+  document (`GET /` must contain `id="root"`), and needs 5 CONSECUTIVE successes
+  before Playwright starts. A fresh workers.dev deploy and the after-deploy
+  `TEST_AUTH_TOKEN` secret propagate across edge colos asynchronously, and worker
+  routes go live BEFORE the assets handler: `/api/*` is `run_worker_first`, so it
+  can 200 on the first probe while `/` still serves Cloudflare's holding page —
+  which is what the browser loads, so specs then assert against that page. Both
+  surfaces, and the streak, are load-bearing; don't weaken it back to one probe.
 - Ephemeral E2E deploys worker + D1 named `news-e2e-<run_id>`
   (`TEMPLATE_E2E_DB_ID` in wrangler.jsonc is sed-replaced) and ALWAYS tears both
   down, also on failure. The prod D1 id comes from the terraform job output and
