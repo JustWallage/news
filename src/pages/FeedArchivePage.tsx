@@ -1,8 +1,9 @@
 import { feedItemListSchema } from "@shared/api";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { FeedItemRow } from "@/components/FeedItemRow";
+import { buttonVariants } from "@/components/ui/button";
 import { useCachedFetch } from "@/hooks/useCachedFetch";
-import { FeedSwitcher } from "@/pages/FeedPage";
+import { cn } from "@/lib/utils";
 
 export function FeedArchivePage() {
   const params = useParams();
@@ -19,7 +20,12 @@ export function FeedArchivePage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <FeedSwitcher feedId={feedId} />
+        <Link
+          to={`/feeds/${String(feedId)}`}
+          className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+        >
+          ← Back to feed
+        </Link>
         <span className="text-sm text-muted-foreground">· archive</span>
       </div>
       {error !== null ? (

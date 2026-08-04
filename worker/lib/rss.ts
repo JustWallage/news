@@ -6,11 +6,17 @@ import { isHttpUrl } from "../../shared/api";
 // before parsing (a hostile or misconfigured URL must not buffer unbounded XML).
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
 const MAX_ITEMS_PER_SOURCE = 50;
+// Summaries are attacker-influenced text that goes into the relevance prompt, so
+// they are truncated here — before any model ever sees them — to bound the token
+// cost per item.
+const MAX_SUMMARY_CHARS = 300;
 
 export interface ParsedFeedItem {
   title: string;
   link: string;
   publishedAt: Date | null;
+  /** Plain-text excerpt when the source publishes one; the AI may judge on it. */
+  summary: string | undefined;
 }
 
 export interface ParsedRssFeed {
@@ -39,6 +45,8 @@ const rssLikeSchema = z.object({
         title: z.string().optional(),
         link: z.string().optional(),
         pubDate: z.string().optional(),
+        description: z.string().optional(),
+        content: z.object({ encoded: z.string().optional() }).optional(),
       }),
     )
     .optional(),
@@ -59,6 +67,8 @@ const atomLikeSchema = z.object({
           .optional(),
         published: z.string().optional(),
         updated: z.string().optional(),
+        summary: z.string().optional(),
+        content: z.string().optional(),
       }),
     )
     .optional(),
@@ -71,6 +81,8 @@ const jsonLikeSchema = z.object({
         title: z.string().optional(),
         url: z.string().optional(),
         date_published: z.string().optional(),
+        summary: z.string().optional(),
+        content_html: z.string().optional(),
       }),
     )
     .optional(),
@@ -80,6 +92,7 @@ interface RawItem {
   title: string | undefined;
   link: string | undefined;
   published: string | undefined;
+  summary: string | undefined;
 }
 
 function rawItems(
@@ -98,6 +111,7 @@ function rawItems(
         link: (e.links?.find((l) => l.rel === "alternate") ?? e.links?.[0])
           ?.href,
         published: e.published ?? e.updated,
+        summary: e.summary ?? e.content,
       })),
     };
   }
@@ -112,6 +126,7 @@ function rawItems(
         title: i.title,
         link: i.url,
         published: i.date_published,
+        summary: i.summary ?? i.content_html,
       })),
     };
   }
@@ -125,6 +140,7 @@ function rawItems(
       title: i.title,
       link: i.link,
       published: i.pubDate,
+      summary: i.description ?? i.content?.encoded,
     })),
   };
 }
@@ -135,6 +151,43 @@ function toDate(value: string | undefined): Date | null {
   }
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+// WordPress appends this tail to every excerpt ("The post <a …>Title</a>
+// appeared first on <a …>Site</a>."): pure boilerplate, so it must not spend the
+// item's token budget nor look like signal to the relevance pass.
+const WORDPRESS_TAIL = /\s*The post\b[\s\S]*?appeared first on\b[\s\S]*$/;
+
+// `lt`/`gt` are deliberately absent: decoding them would rebuild markup the tag
+// strip just removed.
+const ENTITIES: Record<string, string> = {
+  amp: "&",
+  quot: '"',
+  apos: "'",
+  "#39": "'",
+  nbsp: " ",
+  hellip: "…",
+  mdash: "—",
+  ndash: "–",
+  rsquo: "’",
+  lsquo: "‘",
+  ldquo: "“",
+  rdquo: "”",
+};
+
+// Summaries arrive as HTML (often CDATA-wrapped), so reduce them to plain text.
+// A source without any summary field keeps working: undefined in, undefined out.
+function toSummary(raw: string | undefined): string | undefined {
+  if (raw === undefined) {
+    return undefined;
+  }
+  const text = raw
+    .replace(/<[^>]*>/g, " ")
+    .replace(WORDPRESS_TAIL, "")
+    .replace(/&(#?\w+);/g, (whole, name: string) => ENTITIES[name] ?? whole)
+    .replace(/\s+/g, " ")
+    .trim();
+  return text === "" ? undefined : text.slice(0, MAX_SUMMARY_CHARS);
 }
 
 // Parse a feed document into the normalized shape: channel title (hostname
@@ -158,6 +211,7 @@ export function parseFeedXml(body: string, sourceUrl: string): ParsedRssFeed {
         title: itemTitle,
         link: item.link,
         publishedAt: toDate(item.published),
+        summary: toSummary(item.summary),
       },
     ];
   });

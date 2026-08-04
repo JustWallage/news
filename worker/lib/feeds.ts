@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   feedItems,
   feedSources,
@@ -13,10 +13,13 @@ import type { Db } from "./db";
 import type { AiFilter, DigestResult } from "./digest";
 import type { ParsedFeedItem, RssClient } from "./rss";
 
-// D1 caps a query at 100 bound parameters; feed_items upserts bind 9 columns
-// (sentAt is preserved by omission) → 10 rows/insert is safe.
-const ITEM_CHUNK = 10;
+// D1 caps a query at 100 bound parameters; feed_items upserts bind 11 columns
+// (sentAt is preserved by omission) → 9 rows/insert stays under it.
+const ITEM_CHUNK = 9;
 const PAGE_SIZE = 20;
+// The settings drill-down lists one source's items; a long-lived source
+// accumulates without bound, so the modal shows the newest slice.
+const SOURCE_ITEM_LIMIT = 100;
 
 export async function loadFeeds(db: Db, userEmail: string): Promise<FeedRow[]> {
   return db
@@ -167,7 +170,12 @@ function domainOf(link: string): string {
   }
 }
 
-interface EvaluatedItem extends ParsedFeedItem {
+// Which source yielded a link: the first source of the fetch that carried it.
+interface SourcedItem extends ParsedFeedItem {
+  sourceId: number;
+}
+
+interface EvaluatedItem extends SourcedItem {
   relevant: boolean;
   relevanceScore: number;
 }
@@ -189,9 +197,10 @@ export async function runFeedFetch(
     return { count: 0 };
   }
   const perSource = await Promise.all(
-    sources.map(async (source) => {
+    sources.map(async (source): Promise<SourcedItem[]> => {
       try {
-        return (await deps.rss.fetch(source.url)).items;
+        const { items } = await deps.rss.fetch(source.url);
+        return items.map((item) => ({ ...item, sourceId: source.id }));
       } catch {
         // One broken source must not kill the whole run.
         console.warn(`[feeds] source ${String(source.id)} failed; skipping`);
@@ -199,7 +208,9 @@ export async function runFeedFetch(
       }
     }),
   );
-  const byLink = new Map<string, ParsedFeedItem>();
+  // `sources` is ordered by creation, so the first source carrying a link wins
+  // both the dedupe and the attribution.
+  const byLink = new Map<string, SourcedItem>();
   for (const item of perSource.flat()) {
     if (!byLink.has(item.link)) {
       byLink.set(item.link, item);
@@ -234,6 +245,7 @@ export async function runFeedFetch(
         id: i,
         title: c.title,
         domain: domainOf(c.link),
+        summary: c.summary,
       })),
     );
     const fresh = new Map(
@@ -273,8 +285,10 @@ export async function runFeedFetch(
       .values(
         part.map((e) => ({
           feedId: feed.id,
+          sourceId: e.sourceId,
           link: e.link,
           title: e.title,
+          description: e.summary ?? null,
           publishedAt: e.publishedAt,
           fetchedAt: now,
           relevant: e.relevant,
@@ -287,7 +301,9 @@ export async function runFeedFetch(
         target: [feedItems.feedId, feedItems.link],
         // sentAt is deliberately absent: the send-once stamp survives refetches.
         set: {
+          sourceId: sql`excluded.source_id`,
           title: sql`excluded.title`,
+          description: sql`excluded.description`,
           publishedAt: sql`excluded.published_at`,
           fetchedAt: sql`excluded.fetched_at`,
           relevant: sql`excluded.relevant`,
@@ -337,7 +353,19 @@ export async function loadFeedArchive(
     .orderBy(...itemOrder);
 }
 
-// The Telegram selection: current items never delivered before (send-once).
+// Oldest-first, the mirror image of `itemOrder`: undated items lead (SQLite sorts
+// NULL first ascending), then oldest published. The send queue must drain, and a
+// newest-first queue starves a backlog bigger than one message forever.
+const sendOrder = [
+  asc(feedItems.publishedAt),
+  asc(feedItems.fetchedAt),
+  asc(feedItems.id),
+];
+
+// The Telegram selection: every relevant item never delivered before (send-once),
+// oldest first. Deliberately NOT gated on `current` — an item judged relevant
+// whose article rolled out of the RSS window before a digest ran is still owed to
+// the user, and `current` only tracks live-feed membership.
 export async function loadUnsentFeedItems(
   db: Db,
   feedId: number,
@@ -348,11 +376,60 @@ export async function loadUnsentFeedItems(
     .where(
       and(
         eq(feedItems.feedId, feedId),
-        eq(feedItems.current, true),
+        eq(feedItems.relevant, true),
         isNull(feedItems.sentAt),
       ),
     )
-    .orderBy(...itemOrder);
+    .orderBy(...sendOrder);
+}
+
+/** One source's items, newest first, for the settings drill-down. */
+export async function loadSourceItems(
+  db: Db,
+  feedId: number,
+  sourceId: number,
+): Promise<FeedItemRow[]> {
+  return db
+    .select()
+    .from(feedItems)
+    .where(and(eq(feedItems.feedId, feedId), eq(feedItems.sourceId, sourceId)))
+    .orderBy(...itemOrder)
+    .limit(SOURCE_ITEM_LIMIT);
+}
+
+export interface SourceCounts {
+  fetched: number;
+  selected: number;
+}
+
+// Per-source fetched/selected counts in ONE aggregate query (no N+1): group by
+// source and verdict, then fold. Rows written before source attribution have a
+// null `sourceId` and simply belong to no source.
+export async function loadSourceCounts(
+  db: Db,
+  feedId: number,
+): Promise<Map<number, SourceCounts>> {
+  const rows = await db
+    .select({
+      sourceId: feedItems.sourceId,
+      relevant: feedItems.relevant,
+      items: count(),
+    })
+    .from(feedItems)
+    .where(eq(feedItems.feedId, feedId))
+    .groupBy(feedItems.sourceId, feedItems.relevant);
+  const counts = new Map<number, SourceCounts>();
+  for (const row of rows) {
+    if (row.sourceId === null) {
+      continue;
+    }
+    const current = counts.get(row.sourceId) ?? { fetched: 0, selected: 0 };
+    counts.set(row.sourceId, {
+      fetched: current.fetched + row.items,
+      selected: current.selected + (row.relevant ? row.items : 0),
+    });
+  }
+  return counts;
 }
 
 export async function markFeedItemsSent(

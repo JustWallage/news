@@ -26,6 +26,10 @@ boundary. Change the schema here FIRST; both sides follow via `z.infer`.
   telegram 3×`HH:MM`|null shape and `PUT /api/feeds/:id/slots` reuses
   `telegramSlotsUpdateSchema` verbatim; `MAX_FEED_SOURCES`/`FEED_TITLE_MAX_LENGTH`
   are the shared caps (worker enforces, SPA may reflect).
+  `feedSourceSchema` carries `fetchedCount`/`selectedCount` per source (a freshly
+  added source is 0/0), and `feedSourceItemSchema` (= `feedItemSchema` +
+  `selected`) backs `GET /api/feeds/:id/sources/:sourceId/items`. The stored item
+  description is NOT in any contract — it exists only to feed the AI prompt.
 
 No imports from worker/ or src/ — this folder must stay dependency-free
 (zod only) since both tsconfig projects include it.

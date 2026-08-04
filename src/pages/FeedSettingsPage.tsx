@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { SlotTimesEditor } from "@/components/SlotTimesEditor";
+import { SourceItemsDialog } from "@/components/SourceItemsDialog";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -57,6 +58,7 @@ export function FeedSettingsPage() {
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [openSourceId, setOpenSourceId] = useState<number | null>(null);
 
   // Seed the editors from the server only while pristine, so a background
   // revalidate can never clobber what the user is typing.
@@ -154,6 +156,7 @@ export function FeedSettingsPage() {
   };
 
   const sources = data?.sources ?? [];
+  const openSource = sources.find((source) => source.id === openSourceId);
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-2">
@@ -225,31 +228,43 @@ export function FeedSettingsPage() {
           {sources.length === 0 ? (
             <p className="text-sm text-muted-foreground">No sources yet.</p>
           ) : (
-            <ul className="space-y-2">
+            <div className="grid gap-3 sm:grid-cols-2">
               {sources.map((source) => (
-                <li
-                  key={source.id}
-                  className="flex items-center justify-between gap-3 text-sm"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{source.title}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {source.url}
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Remove ${source.title}`}
+                <Card key={source.id} size="sm">
+                  <button
+                    type="button"
+                    className="w-full cursor-pointer text-left"
+                    aria-label={`Items from ${source.title}`}
                     onClick={() => {
-                      removeSource(source.id);
+                      setOpenSourceId(source.id);
                     }}
                   >
-                    Remove
-                  </Button>
-                </li>
+                    <CardHeader>
+                      <CardTitle className="truncate">{source.title}</CardTitle>
+                      <CardDescription className="truncate text-xs">
+                        {source.url}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="text-sm text-muted-foreground">
+                      {source.fetchedCount} fetched · {source.selectedCount}{" "}
+                      selected
+                    </CardContent>
+                  </button>
+                  <CardFooter>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`Remove ${source.title}`}
+                      onClick={() => {
+                        removeSource(source.id);
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </CardFooter>
+                </Card>
               ))}
-            </ul>
+            </div>
           )}
           <form
             className="flex flex-wrap items-center gap-2"
@@ -338,6 +353,16 @@ export function FeedSettingsPage() {
           </Button>
         </CardFooter>
       </Card>
+
+      {openSource !== undefined && (
+        <SourceItemsDialog
+          title={openSource.title}
+          itemsPath={`${path}/sources/${String(openSource.id)}/items`}
+          onClose={() => {
+            setOpenSourceId(null);
+          }}
+        />
+      )}
 
       <ConfirmDialog
         open={confirmDelete}

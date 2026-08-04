@@ -123,31 +123,57 @@ no `ENVIRONMENT`/`isTest` checks leak into logic, and there is no test-only rout
 - Naming: `lib/feed.ts` is the HN feed loader ONLY; `lib/feeds.ts` is the
   user-feeds domain (RSS sources → AI curation → items). Don't mix them.
 - `lib/rss.ts`: `RssClient { fetch(url) }` is the seam (`deps.rss`; fake in
-  e2e keyed off the URL, a URL containing "bad" fails). `parseFeedXml` uses
-  feedsmith + zod re-parse; drops titleless/non-http items, caps 50/source,
-  rejects bodies > 5 MB (user-supplied URLs). `RssFetchError.message` is
-  user-facing (the add-source route returns it).
+  e2e keyed off the URL — "bad" fails, "plain" serves summary-less items).
+  `parseFeedXml` uses feedsmith + zod re-parse; drops titleless/non-http items,
+  caps 50/source (newest-first sort BEFORE the slice, so an oldest-first document
+  does not lose its newest items), rejects bodies > 5 MB (user-supplied URLs).
+  One HTTP request per source returns the whole document, so the cap costs no
+  extra subrequests. `RssFetchError.message` is user-facing (the add-source route
+  returns it).
+- `ParsedFeedItem.summary` is an OPTIONAL per-item excerpt: RSS `description` →
+  `content:encoded`, Atom `summary` → `content`, JSON Feed `summary` →
+  `content_html`. A source publishing none keeps working (`undefined`; the item
+  is still accepted). `toSummary` strips HTML, drops the WordPress "The post …
+  appeared first on …" tail, and truncates to 300 chars before any model sees it.
 - `runFeedFetch` is the feeds twin of `curateForUser`: dedupe by link, reuse
   verdicts at `feeds.prefVersion`, judge the rest via `ai.selectFeedItems`
-  (title + domain only; the AI pass runs BEFORE the upsert with synthetic
+  (title + domain + summary; the AI pass runs BEFORE the upsert with synthetic
   array-index ids — new items have no DB id yet), then one write pass sets
   `current = relevant`. Empty prefs → everything relevant, AI-free. The upsert
-  never touches `sentAt` (send-once survives refetches).
+  never touches `sentAt` (send-once survives refetches). Each row is attributed
+  to the FIRST source of the run carrying its link (`feed_items.source_id`) —
+  the same winner as the dedupe, since `loadFeedSources` orders by creation.
 - `lib/ai.ts`: `FEED_SYSTEM_PROMPT` is a separate prompt over the SAME
   batching/parsing core (`runFilter`); the HN `SYSTEM_PROMPT` and `select()`
-  stay byte-identical — `ai.test.ts` pins the HN contract.
+  stay byte-identical — `ai.test.ts` pins the HN contract. Feeds pass
+  `FEED_BATCH_SIZE` (10, half of HN's `BATCH_SIZE`): a summary costs several
+  times a bare title, and a smaller batch loses less work when a response is
+  unparseable. The summary is attacker-influenced text inside the prompt, so
+  `FEED_SYSTEM_PROMPT`'s injection guard names it explicitly.
 - Routes: every `/api/feeds/:id/*` handler goes through the ownership gate
   (`loadFeedForUser`; unknown and foreign ids are the same 404).
   `POST /:id/run` cooldown = `feeds.lastFetchedAt` + `DIGEST_COOLDOWN_SECONDS`
   (no runs table; a scheduled run also pushes it back). Slots reuse
   `telegramSlotsUpdateSchema` + `slotMinutes` and 409 until a chat is linked.
+  `GET /:id` carries per-source `fetchedCount`/`selectedCount` from
+  `loadSourceCounts` — ONE aggregate query (group by source + verdict), never
+  N+1; `GET /:id/sources/:sourceId/items` backs the settings drill-down (newest
+  100, each with `selected`).
+- **`current` and send eligibility answer different questions.** `current` =
+  member of the latest fetch AND relevant, and drives the WEB feed only
+  (`loadFeedItems`). The Telegram queue (`loadUnsentFeedItems`) is
+  `relevant AND sentAt IS NULL`, with NO `current` requirement: an item judged
+  relevant whose article rolled out of the RSS window before a digest ran is
+  still owed to the user. That queue is OLDEST-first (`sendOrder`, the mirror of
+  the web feed's `itemOrder`) so a backlog larger than `MAX_STORIES` drains
+  instead of starving its oldest entries forever.
 - Cron: `runTelegramDigests` runs `sendDueDigests` then `sendDueFeedDigests`
   SEQUENTIALLY (shared 50-subrequest budget per tick; feeds also sequential
-  with per-feed try/catch). A due feed refetches, then sends only `current AND
-sentAt IS NULL` items (capped `MAX_STORIES`) and stamps `sentAt` on exactly
-  the delivered ones — send-once, overflow rolls to the next slot; zero unsent
-  still sends the empty-case message. Due-ness = `dueSlot(feed, ...)` in the
-  OWNER's `telegram.timezone`.
+  with per-feed try/catch). A due feed refetches, then sends the unsent queue
+  above (capped `MAX_STORIES`) and stamps `sentAt` on exactly the delivered ones
+  — send-once, overflow rolls to the next slot; zero unsent still sends the
+  empty-case message. Due-ness = `dueSlot(feed, ...)` in the OWNER's
+  `telegram.timezone`.
 
 ## Public demo feed (`routes/public.ts`, `lib/feed.ts` `loadPublicFeed`)
 

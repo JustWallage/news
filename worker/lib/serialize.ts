@@ -1,9 +1,11 @@
 import type { FeedItemRow } from "../../db/schema";
 import {
   feedItemSchema,
+  feedSourceItemSchema,
   publicStorySchema,
   storySchema,
   type FeedItem,
+  type FeedSourceItem,
   type PublicStory,
   type Story,
 } from "../../shared/api";
@@ -48,6 +50,13 @@ export function toFeedItem(row: FeedItemRow): FeedItem {
     publishedAt:
       row.publishedAt === null ? null : row.publishedAt.toISOString(),
     relevanceScore: row.relevanceScore,
+  });
+}
+
+export function toFeedSourceItem(row: FeedItemRow): FeedSourceItem {
+  return feedSourceItemSchema.parse({
+    ...toFeedItem(row),
+    selected: row.relevant,
   });
 }
 

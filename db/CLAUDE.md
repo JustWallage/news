@@ -44,6 +44,15 @@ Rules:
   `current` = member of the latest fetch AND relevant, unique `(feed_id, link)`
   dedupes across fetches and sources. `sent_at` is the send-once Telegram guard:
   stamped when the item is delivered, never re-sent, preserved by the upsert.
+  **`current` does NOT gate delivery** — the Telegram queue is
+  `relevant AND sent_at IS NULL` (see worker/CLAUDE.md); `current` is the web
+  feed's live-membership flag alone.
+- `feed_items.source_id` is which source yielded the link (first one wins the
+  dedupe), nullable and deliberately NOT a foreign key: removing a source must
+  neither fail nor delete its already-judged items. Rows written before
+  attribution stay null and belong to no source's counts.
+  `feed_items.description` is the optional plain-text excerpt the relevance pass
+  reads alongside the title (null when the source publishes none).
   Relevant items are the feed's archive and are never pruned; never-relevant
   non-current ones age out after 60 days (`worker/lib/maintenance.ts`).
   `feeds.last_fetched_at` doubles as the per-feed cooldown stamp for

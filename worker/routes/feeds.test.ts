@@ -193,6 +193,54 @@ describe("feeds api", () => {
     expect(archive.items).toHaveLength(1);
   });
 
+  it("reports per-source counts and lists that source's items", async () => {
+    const id = await createFeed();
+    const path = `/api/feeds/${String(id)}`;
+    await app.request(
+      path,
+      json("PUT", { title: "My feed", preferencesText: "rust" }),
+      env,
+    );
+    const added = await app.request(
+      `${path}/sources`,
+      json("POST", { url: "https://blogs.example.com/feed" }),
+      env,
+    );
+    const source = await added.json<{
+      id: number;
+      fetchedCount: number;
+      selectedCount: number;
+    }>();
+    expect(source).toMatchObject({ fetchedCount: 0, selectedCount: 0 });
+
+    await app.request(`${path}/run`, json("POST", {}), env);
+
+    const detail = await (
+      await app.request(path, get, env)
+    ).json<{ sources: { fetchedCount: number; selectedCount: number }[] }>();
+    expect(detail.sources[0]).toMatchObject({
+      fetchedCount: 15,
+      selectedCount: 1,
+    });
+
+    const items = await (
+      await app.request(`${path}/sources/${String(source.id)}/items`, get, env)
+    ).json<{ items: { title: string; selected: boolean }[] }>();
+    expect(items.items).toHaveLength(15);
+    expect(items.items.filter((i) => i.selected).map((i) => i.title)).toEqual([
+      "Rust in the kernel, one year in",
+    ]);
+    expect(
+      (await app.request(`${path}/sources/abc/items`, get, env)).status,
+    ).toBe(400);
+    const foreign = await app.request(
+      `${path}/sources/${String(source.id)}/items`,
+      asUser("other@example.test"),
+      env,
+    );
+    expect(foreign.status).toBe(404);
+  });
+
   it("throttles an on-demand run within the cooldown window", async () => {
     const throttled = { ...env, DIGEST_COOLDOWN_SECONDS: 600 };
     const id = await createFeed();

@@ -34,12 +34,14 @@ export interface Verdict {
   score: number;
 }
 
-// A user-feed item as presented to the AI: title + link domain only (per the
-// feeds contract), with a caller-assigned id — new items have no DB id yet.
+// An item as presented to the AI: title, link domain and — for RSS items whose
+// source publishes one — a short summary, with a caller-assigned id (new feed
+// items have no DB id yet).
 export interface FeedItemCandidate {
   id: number;
   title: string;
   domain: string;
+  summary: string | undefined;
 }
 
 /** The external dependency seam for relevance filtering (Workers AI in prod). */
