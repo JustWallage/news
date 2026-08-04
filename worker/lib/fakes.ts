@@ -95,18 +95,18 @@ export const fakeTelegramClient: TelegramClient = {
   },
 };
 
-// Marks an item relevant when its title contains any word (>= 3 chars) from the
-// preferences text — predictable for tests, plausible for dev.
+// Marks an item relevant when its title or summary contains any word (>= 3
+// chars) from the preferences text — predictable for tests, plausible for dev.
 function keywordVerdicts(
   prefs: string,
-  items: { id: number; title: string }[],
+  items: { id: number; title: string; summary?: string | undefined }[],
 ): Verdict[] {
   const words = prefs
     .toLowerCase()
     .split(/\s+/)
     .filter((word) => word.length >= 3);
   return items.map((item) => {
-    const title = item.title.toLowerCase();
+    const title = `${item.title} ${item.summary ?? ""}`.toLowerCase();
     const relevant = words.some((word) => title.includes(word));
     return {
       id: item.id,
@@ -124,20 +124,38 @@ export const fakeAiFilter: AiFilter = {
 
 // Canned RSS channel keyed off the source URL, so two sources in one feed yield
 // distinct item links. The two featured titles carry the same e2e keywords as
-// the fake HN stories; a URL containing "bad" fails like an unreachable feed.
+// the fake HN stories, and the third one's keyword ("Amsterdam") lives ONLY in
+// its summary, so a test can prove the summary reaches the relevance pass. A URL
+// containing "plain" serves a summary-less source (a feed format that publishes
+// none); a URL containing "bad" fails like an unreachable feed.
 export const fakeRssClient: RssClient = {
   fetch: (url) => {
     if (url.includes("bad")) {
       return Promise.reject(new RssFetchError("Could not reach that URL"));
     }
     const { hostname, origin } = new URL(url);
+    const summaryless = url.includes("plain");
     const featured = [
-      { title: "Rust in the kernel, one year in", slug: "rust" },
-      { title: "Bitcoin custody for grandmothers", slug: "bitcoin" },
+      {
+        title: "Rust in the kernel, one year in",
+        slug: "rust",
+        summary: "A retrospective on the first year of drivers in mainline.",
+      },
+      {
+        title: "Bitcoin custody for grandmothers",
+        slug: "bitcoin",
+        summary: "How custodial wallets changed for retail holders.",
+      },
+      {
+        title: "A quiet year for the platform",
+        slug: "platform",
+        summary: "The Amsterdam-based startup raised a seed round.",
+      },
     ];
     const filler = Array.from({ length: 12 }, (_unused, i) => ({
       title: `Sample article ${i}`,
       slug: `sample-${i}`,
+      summary: `Filler excerpt ${String(i)} carrying no signal.`,
     }));
     const feed: ParsedRssFeed = {
       title: `Fake Feed (${hostname})`,
@@ -145,6 +163,7 @@ export const fakeRssClient: RssClient = {
         title: item.title,
         link: `${origin}/articles/${item.slug}`,
         publishedAt: new Date(Date.UTC(2026, 0, 1, 12, i)),
+        summary: summaryless ? undefined : item.summary,
       })),
     };
     return Promise.resolve(feed);

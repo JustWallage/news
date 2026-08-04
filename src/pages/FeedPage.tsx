@@ -1,48 +1,12 @@
-import {
-  digestRunResultSchema,
-  feedItemListSchema,
-  feedListSchema,
-} from "@shared/api";
+import { digestRunResultSchema, feedItemListSchema } from "@shared/api";
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { FeedItemRow } from "@/components/FeedItemRow";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { useCachedFetch } from "@/hooks/useCachedFetch";
 import { ApiRequestError, apiFetch } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
-
-// The top bar every feed page shares: switch feeds, go back to the overview,
-// and jump to the archive/settings of the selected feed.
-export function FeedSwitcher({ feedId }: { feedId: number }) {
-  const { data } = useCachedFetch("/api/feeds", feedListSchema);
-  const navigate = useNavigate();
-  const feeds = data?.feeds ?? [];
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Link
-        to="/feeds"
-        className="text-sm text-muted-foreground hover:underline"
-      >
-        ← All feeds
-      </Link>
-      <select
-        aria-label="Selected feed"
-        value={String(feedId)}
-        onChange={(event) => {
-          void navigate(`/feeds/${event.target.value}`);
-        }}
-        className="flex h-8 rounded-md border border-input bg-transparent px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-      >
-        {feeds.map((feed) => (
-          <option key={feed.id} value={String(feed.id)}>
-            {feed.title}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
 
 export function FeedPage() {
   const params = useParams();
@@ -84,7 +48,12 @@ export function FeedPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <FeedSwitcher feedId={feedId} />
+        <Link
+          to="/feeds"
+          className="text-sm text-muted-foreground hover:underline"
+        >
+          ← All feeds
+        </Link>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
@@ -105,12 +74,6 @@ export function FeedPage() {
             className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
           >
             Settings
-          </Link>
-          <Link
-            to="/feeds"
-            className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
-          >
-            New feed
           </Link>
         </div>
       </div>

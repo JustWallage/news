@@ -10,6 +10,7 @@ import {
   feedItemListSchema,
   feedListSchema,
   feedSourceCreateSchema,
+  feedSourceItemListSchema,
   feedSourceSchema,
   feedSummarySchema,
   feedUpdateSchema,
@@ -26,12 +27,14 @@ import {
   loadFeedItems,
   loadFeedSources,
   loadFeeds,
+  loadSourceCounts,
+  loadSourceItems,
   removeFeedSource,
   runFeedFetch,
   updateFeed,
 } from "../lib/feeds";
 import { parseJsonBody } from "../lib/http";
-import { toFeedItem } from "../lib/serialize";
+import { toFeedItem, toFeedSourceItem } from "../lib/serialize";
 import { formatSlots, loadChatId, slotMinutes } from "../lib/telegram-bot";
 
 export const feedsRoutes = new Hono<AppEnv>();
@@ -83,6 +86,7 @@ feedsRoutes.get("/:id", async (c) => {
   }
   const db = getDb(c.env);
   const sources = await loadFeedSources(db, feed.id);
+  const counts = await loadSourceCounts(db, feed.id);
   const chatId = await loadChatId(db, c.get("userEmail"));
   return c.json(
     feedDetailSchema.parse({
@@ -90,7 +94,13 @@ feedsRoutes.get("/:id", async (c) => {
       title: feed.title,
       preferencesText: feed.preferencesText,
       sources: sources.map((s) =>
-        feedSourceSchema.parse({ id: s.id, url: s.url, title: s.title }),
+        feedSourceSchema.parse({
+          id: s.id,
+          url: s.url,
+          title: s.title,
+          fetchedCount: counts.get(s.id)?.fetched ?? 0,
+          selectedCount: counts.get(s.id)?.selected ?? 0,
+        }),
       ),
       slots: formatSlots(feed),
       telegramLinked: chatId !== null,
@@ -174,21 +184,48 @@ feedsRoutes.post("/:id/sources", async (c) => {
       id: result.source.id,
       url: result.source.url,
       title: result.source.title,
+      fetchedCount: 0,
+      selectedCount: 0,
     }),
   );
 });
+
+function sourceIdParam(c: Context<AppEnv>): number | Response {
+  const sourceId = Number(c.req.param("sourceId"));
+  if (!Number.isInteger(sourceId) || sourceId <= 0) {
+    return c.json({ error: "Invalid source id" }, 400);
+  }
+  return sourceId;
+}
 
 feedsRoutes.delete("/:id/sources/:sourceId", async (c) => {
   const feed = await requireFeed(c);
   if (feed instanceof Response) {
     return feed;
   }
-  const sourceId = Number(c.req.param("sourceId"));
-  if (!Number.isInteger(sourceId) || sourceId <= 0) {
-    return c.json({ error: "Invalid source id" }, 400);
+  const sourceId = sourceIdParam(c);
+  if (sourceId instanceof Response) {
+    return sourceId;
   }
   await removeFeedSource(getDb(c.env), feed.id, sourceId);
   return c.json({ ok: true });
+});
+
+// What this source contributed: its stored items with the AI's verdict, so the
+// settings page can show fetched-vs-selected without a second round trip.
+feedsRoutes.get("/:id/sources/:sourceId/items", async (c) => {
+  const feed = await requireFeed(c);
+  if (feed instanceof Response) {
+    return feed;
+  }
+  const sourceId = sourceIdParam(c);
+  if (sourceId instanceof Response) {
+    return sourceId;
+  }
+  const rows = await loadSourceItems(getDb(c.env), feed.id, sourceId);
+  return c.json(
+    feedSourceItemListSchema.parse({ items: rows.map(toFeedSourceItem) }),
+  );
 });
 
 feedsRoutes.get("/:id/items", async (c) => {

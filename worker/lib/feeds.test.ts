@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { feedItems, feedSources, feeds } from "../../db/schema";
 import { getDb } from "./db";
-import type { AiFilter } from "./digest";
+import type { AiFilter, FeedItemCandidate } from "./digest";
 import { fakeAiFilter } from "./fakes";
 import {
   addFeedSource,
@@ -12,6 +12,8 @@ import {
   loadFeedArchive,
   loadFeedForUser,
   loadFeedItems,
+  loadSourceCounts,
+  loadSourceItems,
   loadUnsentFeedItems,
   markFeedItemsSent,
   runFeedFetch,
@@ -23,11 +25,12 @@ import { RssFetchError } from "./rss";
 const USER = "user@example.test";
 const NOW = new Date("2026-07-15T10:00:00Z");
 
-function item(slug: string, minutesAgo = 0): ParsedFeedItem {
+function item(slug: string, minutesAgo = 0, summary?: string): ParsedFeedItem {
   return {
     title: `Article about ${slug}`,
     link: `https://src.example.com/${slug}`,
     publishedAt: new Date(NOW.getTime() - minutesAgo * 60_000),
+    summary,
   };
 }
 
@@ -47,14 +50,19 @@ function cannedRss(channels: Record<string, ParsedFeedItem[]>): RssClient {
 }
 
 // AI filter that records what it was asked to judge (fake keyword logic inside).
-function countingAi(): { ai: AiFilter; judged: () => number } {
-  let judged = 0;
+function countingAi(): {
+  ai: AiFilter;
+  judged: () => number;
+  seen: () => FeedItemCandidate[];
+} {
+  const seen: FeedItemCandidate[] = [];
   return {
-    judged: () => judged,
+    judged: () => seen.length,
+    seen: () => seen,
     ai: {
       select: (prefs, stories) => fakeAiFilter.select(prefs, stories),
       selectFeedItems: (prefs, items) => {
-        judged += items.length;
+        seen.push(...items);
         return fakeAiFilter.selectFeedItems(prefs, items);
       },
     },
@@ -176,10 +184,16 @@ describe("addFeedSource", () => {
 });
 
 describe("runFeedFetch", () => {
-  async function withSource(feedId: number, url: string): Promise<void> {
-    await getDb(env)
+  async function withSource(feedId: number, url: string): Promise<number> {
+    const rows = await getDb(env)
       .insert(feedSources)
-      .values({ feedId, url, title: "t", createdAt: NOW });
+      .values({ feedId, url, title: "t", createdAt: NOW })
+      .returning({ id: feedSources.id });
+    const id = rows[0]?.id;
+    if (id === undefined) {
+      throw new Error("source insert returned no id");
+    }
+    return id;
   }
 
   it("dedupes by link across sources and marks current = relevant", async () => {
@@ -309,6 +323,81 @@ describe("runFeedFetch", () => {
     expect(after?.fetchedAt.getTime()).toBe(later.getTime());
   });
 
+  it("attributes a shared link to the first source and stores the summary", async () => {
+    const db = getDb(env);
+    const id = await makeFeed("rust");
+    const first = await withSource(id, "https://a.example.com/feed");
+    await withSource(id, "https://b.example.com/feed");
+    const shared = item("rust-shared", 0, "Written in <b>Rust</b>.");
+    const rss = cannedRss({
+      "https://a.example.com/feed": [shared],
+      "https://b.example.com/feed": [shared, item("rust-only-b")],
+    });
+
+    await runFeedFetch(db, { rss, ai: fakeAiFilter }, await feedById(id), NOW);
+
+    const rows = await db.select().from(feedItems);
+    const sharedRow = rows.find((r) => r.link.endsWith("rust-shared"));
+    expect(sharedRow?.sourceId).toBe(first);
+    expect(sharedRow?.description).toBe("Written in <b>Rust</b>.");
+    expect(
+      rows.find((r) => r.link.endsWith("rust-only-b"))?.description,
+    ).toBeNull();
+  });
+
+  it("passes the summary to the AI and judges on it", async () => {
+    const db = getDb(env);
+    const id = await makeFeed("rotterdam");
+    await withSource(id, "https://a.example.com/feed");
+    const rss = cannedRss({
+      "https://a.example.com/feed": [
+        item("funding", 0, "A Rotterdam startup raised a seed round."),
+        item("elsewhere", 1, "A Lisbon startup raised a seed round."),
+      ],
+    });
+
+    const counting = countingAi();
+    const result = await runFeedFetch(
+      db,
+      { rss, ai: counting.ai },
+      await feedById(id),
+      NOW,
+    );
+
+    expect(counting.seen().map((c) => c.summary)).toEqual([
+      "A Rotterdam startup raised a seed round.",
+      "A Lisbon startup raised a seed round.",
+    ]);
+    // Neither title mentions Rotterdam: the verdict can only come from the summary.
+    expect(result.count).toBe(1);
+    const rows = await db.select().from(feedItems);
+    expect(rows.find((r) => r.link.endsWith("funding"))?.relevant).toBe(true);
+    expect(rows.find((r) => r.link.endsWith("elsewhere"))?.relevant).toBe(
+      false,
+    );
+  });
+
+  it("evaluates a source whose items carry no summary at all", async () => {
+    const db = getDb(env);
+    const id = await makeFeed("rust");
+    await withSource(id, "https://a.example.com/feed");
+    const rss = cannedRss({
+      "https://a.example.com/feed": [item("rust-bare"), item("cooking-bare")],
+    });
+
+    const counting = countingAi();
+    const result = await runFeedFetch(
+      db,
+      { rss, ai: counting.ai },
+      await feedById(id),
+      NOW,
+    );
+
+    expect(counting.seen().every((c) => c.summary === undefined)).toBe(true);
+    expect(result.count).toBe(1);
+    expect(await db.select().from(feedItems)).toHaveLength(2);
+  });
+
   it("does not stamp lastFetchedAt when the feed has no sources", async () => {
     const db = getDb(env);
     const id = await makeFeed();
@@ -332,12 +421,14 @@ describe("item queries", () => {
       current?: boolean;
       publishedAt?: Date | null;
       sentAt?: Date | null;
+      sourceId?: number;
     }[],
   ): Promise<void> {
     const db = getDb(env);
     for (const row of rows) {
       await db.insert(feedItems).values({
         feedId,
+        sourceId: row.sourceId ?? null,
         link: `https://src.example.com/${row.slug}`,
         title: row.slug,
         publishedAt: row.publishedAt === undefined ? NOW : row.publishedAt,
@@ -397,17 +488,20 @@ describe("item queries", () => {
     ]);
   });
 
-  it("selects only never-sent current items and stamps them sent", async () => {
+  it("selects every never-sent relevant item and stamps them sent", async () => {
     const db = getDb(env);
     const id = await makeFeed();
     await seedItems(id, [
       { slug: "fresh" },
       { slug: "already-sent", sentAt: NOW },
-      { slug: "gone", current: false },
+      // Judged relevant, then its article rolled out of the RSS window before a
+      // digest ran: still owed to the user.
+      { slug: "stranded", current: false },
+      { slug: "never-relevant", relevant: false, current: false },
     ]);
 
     const unsent = await loadUnsentFeedItems(db, id);
-    expect(unsent.map((r) => r.title)).toEqual(["fresh"]);
+    expect(unsent.map((r) => r.title).sort()).toEqual(["fresh", "stranded"]);
 
     await markFeedItemsSent(
       db,
@@ -415,6 +509,58 @@ describe("item queries", () => {
       NOW,
     );
     expect(await loadUnsentFeedItems(db, id)).toHaveLength(0);
+  });
+
+  it("drains the send queue oldest-first, undated items leading", async () => {
+    const id = await makeFeed();
+    await seedItems(id, [
+      { slug: "newest", publishedAt: new Date(NOW.getTime() - 60_000) },
+      { slug: "oldest", publishedAt: new Date(NOW.getTime() - 600_000) },
+      { slug: "middle", publishedAt: new Date(NOW.getTime() - 300_000) },
+      { slug: "undated", publishedAt: null },
+    ]);
+
+    expect(
+      (await loadUnsentFeedItems(getDb(env), id)).map((r) => r.title),
+    ).toEqual(["undated", "oldest", "middle", "newest"]);
+    // The web feed keeps the opposite (newest-first) order.
+    expect((await loadFeedItems(getDb(env), id)).map((r) => r.title)).toEqual([
+      "newest",
+      "middle",
+      "oldest",
+      "undated",
+    ]);
+  });
+
+  it("counts fetched and selected per source, ignoring unattributed rows", async () => {
+    const db = getDb(env);
+    const id = await makeFeed();
+    await seedItems(id, [
+      { slug: "a-hit", sourceId: 7 },
+      { slug: "a-miss", relevant: false, current: false, sourceId: 7 },
+      { slug: "b-hit", sourceId: 8 },
+      { slug: "legacy" },
+    ]);
+
+    const counts = await loadSourceCounts(db, id);
+
+    expect(counts.get(7)).toEqual({ fetched: 2, selected: 1 });
+    expect(counts.get(8)).toEqual({ fetched: 1, selected: 1 });
+    expect(counts.size).toBe(2);
+  });
+
+  it("lists one source's items with the others left out", async () => {
+    const db = getDb(env);
+    const id = await makeFeed();
+    await seedItems(id, [
+      { slug: "mine", sourceId: 7 },
+      { slug: "theirs", sourceId: 8 },
+      { slug: "legacy" },
+    ]);
+
+    expect((await loadSourceItems(db, id, 7)).map((r) => r.title)).toEqual([
+      "mine",
+    ]);
   });
 });
 

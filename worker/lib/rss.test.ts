@@ -100,6 +100,94 @@ describe("parseFeedXml", () => {
     expect(feed.items.some((i) => i.title === "Item 5")).toBe(false);
   });
 
+  it("reduces an RSS description to plain text, minus the WordPress tail", () => {
+    const feed = parseFeedXml(
+      rss(
+        `<item><title>Funded</title><link>https://blog.example.com/f</link>` +
+          `<description><![CDATA[<p>A Rotterdam startup raised &euro;2M &amp; hired.</p>` +
+          `<p>The post <a href="https://x.test/f">Funded</a> appeared first on <a href="https://x.test">Site</a>.</p>]]></description>` +
+          `</item>`,
+      ),
+      SOURCE,
+    );
+    expect(feed.items[0]?.summary).toBe(
+      "A Rotterdam startup raised &euro;2M & hired.",
+    );
+  });
+
+  it("falls back to content:encoded when there is no description", () => {
+    const feed = parseFeedXml(
+      `<?xml version="1.0"?><rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">` +
+        `<channel><title>My Blog</title><item><title>Body only</title>` +
+        `<link>https://blog.example.com/c</link>` +
+        `<content:encoded><![CDATA[<p>The whole article body.</p>]]></content:encoded>` +
+        `</item></channel></rss>`,
+      SOURCE,
+    );
+    expect(feed.items[0]?.summary).toBe("The whole article body.");
+  });
+
+  it("leaves the summary undefined when the item publishes none", () => {
+    const feed = parseFeedXml(
+      rss(
+        `<item><title>Bare</title><link>https://blog.example.com/b</link></item>`,
+      ),
+      SOURCE,
+    );
+    expect(feed.items).toHaveLength(1);
+    expect(feed.items[0]?.summary).toBeUndefined();
+  });
+
+  it("truncates a long summary to 300 characters", () => {
+    const feed = parseFeedXml(
+      rss(
+        `<item><title>Long</title><link>https://blog.example.com/l</link>` +
+          `<description>${"a".repeat(900)}</description></item>`,
+      ),
+      SOURCE,
+    );
+    expect(feed.items[0]?.summary).toHaveLength(300);
+  });
+
+  it("takes the Atom summary, falling back to content", () => {
+    const entry = (body: string): string =>
+      `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><title>Atom Blog</title>` +
+      `<entry><title>Entry</title><link href="https://blog.example.com/e" rel="alternate"/>${body}</entry></feed>`;
+    expect(
+      parseFeedXml(
+        entry(`<summary>Short take.</summary><content>Full body.</content>`),
+        SOURCE,
+      ).items[0]?.summary,
+    ).toBe("Short take.");
+    expect(
+      parseFeedXml(entry(`<content>Full body.</content>`), SOURCE).items[0]
+        ?.summary,
+    ).toBe("Full body.");
+  });
+
+  it("takes the JSON Feed summary, falling back to content_html", () => {
+    const json = (item: Record<string, string>): string =>
+      JSON.stringify({
+        version: "https://jsonfeed.org/version/1.1",
+        title: "JSON Blog",
+        items: [{ id: "1", url: "https://blog.example.com/j", ...item }],
+      });
+    expect(
+      parseFeedXml(
+        json({
+          title: "J",
+          summary: "Summary line.",
+          content_html: "<p>Body</p>",
+        }),
+        SOURCE,
+      ).items[0]?.summary,
+    ).toBe("Summary line.");
+    expect(
+      parseFeedXml(json({ title: "J", content_html: "<p>Body</p>" }), SOURCE)
+        .items[0]?.summary,
+    ).toBe("Body");
+  });
+
   it("turns an unparseable date into null", () => {
     const feed = parseFeedXml(
       rss(

@@ -277,6 +277,41 @@ describe("sendDueFeedDigests", () => {
     expect(second.sent[0]?.text).not.toContain("Rust in the kernel");
   });
 
+  it("still delivers a relevant item that fell out of the current fetch", async () => {
+    const db = getDb(env);
+    await db.insert(telegram).values({ userEmail: USER, chatId: CHAT });
+    const feedId = await seedFeed(minute);
+    // A verdict from an earlier run whose article has since left the RSS window:
+    // current=false, never sent. Losing it would be silent data loss.
+    const longAgo = new Date("2025-12-01T00:00:00Z");
+    await db.insert(feedItems).values({
+      feedId,
+      link: "https://blogs.example.com/articles/rust-gone",
+      title: "Rust feature that scrolled away",
+      publishedAt: longAgo,
+      fetchedAt: longAgo,
+      relevant: true,
+      relevanceScore: 80,
+      prefVersion: 1,
+      current: false,
+    });
+
+    const run = feedDeps();
+    await sendDueFeedDigests(db, run.deps, APP, now);
+
+    const text = run.sent[0]?.text ?? "";
+    expect(text).toContain("Rust feature that scrolled away");
+    expect(text).toContain("Rust in the kernel");
+    // Oldest first: the stranded item drains ahead of this run's fresh pick.
+    expect(text.indexOf("scrolled away")).toBeLessThan(
+      text.indexOf("Rust in the kernel"),
+    );
+    const sentRows = (await db.select().from(feedItems)).filter(
+      (r) => r.sentAt !== null,
+    );
+    expect(sentRows).toHaveLength(2);
+  });
+
   it("skips feeds that are not due or whose owner has no chat", async () => {
     const db = getDb(env);
     await db.insert(telegram).values({ userEmail: USER, chatId: CHAT });

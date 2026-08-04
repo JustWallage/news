@@ -138,8 +138,13 @@ export const feedItems = sqliteTable(
     feedId: integer("feed_id")
       .notNull()
       .references(() => feeds.id),
+    // Which source yielded this link (first one wins the dedupe). Deliberately
+    // NOT a foreign key: removing a source must neither fail nor take its
+    // already-judged items with it. Null on rows written before attribution.
+    sourceId: integer("source_id"),
     link: text("link").notNull(),
     title: text("title").notNull(),
+    description: text("description"),
     publishedAt: integer("published_at", { mode: "timestamp" }),
     fetchedAt: integer("fetched_at", { mode: "timestamp" }).notNull(),
     relevant: integer("relevant", { mode: "boolean" }).notNull().default(true),

@@ -127,6 +127,10 @@ export const feedSourceSchema = z.object({
   id: z.int(),
   url: z.string(),
   title: z.string(),
+  /** Items ever stored from this source (attribution is first-source-wins). */
+  fetchedCount: z.int(),
+  /** How many of those the AI judged relevant. */
+  selectedCount: z.int(),
 });
 
 export const feedSourceCreateSchema = z.object({
@@ -159,6 +163,17 @@ export const feedItemListSchema = z.object({
   items: z.array(feedItemSchema),
   lastFetchedAt: z.iso.datetime().nullable(),
 });
+
+// One source's items with their verdict, for the settings drill-down: `selected`
+// is the sticky AI verdict, so a caller can show fetched-vs-selected side by side.
+export const feedSourceItemSchema = feedItemSchema.extend({
+  selected: z.boolean(),
+});
+
+export const feedSourceItemListSchema = z.object({
+  items: z.array(feedSourceItemSchema),
+});
+export type FeedSourceItem = z.infer<typeof feedSourceItemSchema>;
 
 // ---- Telegram ----
 

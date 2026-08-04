@@ -53,8 +53,15 @@
   `/feeds/:feedId/settings`): `FeedContext`/`useFeed` belong to the HN feed —
   feeds pages own their `useCachedFetch` state instead (the ArchivePage
   pattern) and have their OWN Refresh (`POST /api/feeds/:id/run`; the header
-  Refresh stays HN-only). `FeedSwitcher` (in `FeedPage.tsx`) is the shared
-  top-bar select that navigates between feeds. `FeedItemRow` is the lean item
+  Refresh stays HN-only). Switching feeds goes ONLY through `/feeds` (the
+  overview cards) — there is no feed picker on a feed page; the feed page links
+  to `/feeds`, and archive/settings link back to `/feeds/:feedId`.
+  Feed settings renders each source as a `Card` (title, URL, fetched/selected
+  counts) whose body is a button opening `SourceItemsDialog` — a Base UI
+  `Dialog` (same hand-rolled pattern as `ConfirmDialog`, which uses
+  `AlertDialog`) that reads `GET /api/feeds/:id/sources/:sourceId/items` and is
+  mounted only while open, so the fetch follows the click.
+  `FeedItemRow` is the lean item
   row (`StoryRow` is HN-shaped — don't reuse it). `SlotTimesEditor` is the
   shared three-time-inputs editor (TelegramSection + feed settings); parents
   own state/dirty/save. `ApiRequestError` is exported so callers can branch on

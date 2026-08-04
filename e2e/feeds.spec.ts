@@ -2,6 +2,7 @@ import type { APIRequestContext } from "@playwright/test";
 import {
   feedCreatedSchema,
   feedDetailSchema,
+  feedItemListSchema,
   telegramLinkCodeSchema,
 } from "@shared/api";
 import { expect, test } from "./fixtures";
@@ -104,25 +105,33 @@ test("the overview shows a card with the title and preferences entry", async ({
   await expect(card.getByText("bitcoin")).toBeVisible();
 });
 
-test("the dropdown switches between feeds and All feeds returns to the overview", async ({
+test("switching feeds goes through the overview, which is the only affordance", async ({
   page,
   request,
 }) => {
   const first = await seedFeed(request, { title: "First feed" });
-  const second = await seedFeed(request, { title: "Second feed" });
+  await seedFeed(request, { title: "Second feed" });
 
   await page.goto(`/feeds/${String(first)}`);
-  const select = page.getByLabel("Selected feed");
-  await expect(select).toHaveValue(String(first));
-
-  await select.selectOption(String(second));
-  await expect(page).toHaveURL(`/feeds/${String(second)}`);
-  await expect(page.getByLabel("Selected feed")).toHaveValue(String(second));
+  await expect(page.getByLabel("Selected feed")).toBeHidden();
+  await expect(page.getByRole("link", { name: "New feed" })).toBeHidden();
 
   await page.getByRole("link", { name: "← All feeds" }).click();
   await expect(page).toHaveURL("/feeds");
   await expect(page.getByText("First feed")).toBeVisible();
-  await expect(page.getByText("Second feed")).toBeVisible();
+
+  await page.getByRole("link", { name: /Second feed/ }).click();
+  await expect(page).toHaveURL(/\/feeds\/\d+$/);
+  await expect(page).not.toHaveURL(`/feeds/${String(first)}`);
+});
+
+test("the archive links back to its feed", async ({ page, request }) => {
+  const id = await seedFeed(request, { title: "Navigable" });
+  await page.goto(`/feeds/${String(id)}/archive`);
+
+  await page.getByRole("link", { name: "← Back to feed" }).click();
+
+  await expect(page).toHaveURL(`/feeds/${String(id)}`);
 });
 
 test("a failing source URL surfaces an error and stores nothing", async ({
@@ -204,6 +213,94 @@ test("the archive keeps items that fell out of the current fetch", async ({
     2,
   );
   await expect(page.getByText("Sample article 0")).toBeHidden();
+});
+
+test("each source card shows its counts and opens the fetched/selected lists", async ({
+  page,
+  request,
+}) => {
+  const id = await seedFeed(request, {
+    title: "Counted",
+    preferences: "rust",
+    sourceHost: "blogs.example.com",
+  });
+  expect((await request.post(`/api/feeds/${String(id)}/run`)).ok()).toBe(true);
+
+  await page.goto(`/feeds/${String(id)}/settings`);
+  await expect(page.getByText("15 fetched · 1 selected")).toBeVisible();
+
+  await page
+    .getByRole("button", { name: "Items from Fake Feed (blogs.example.com)" })
+    .click();
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("Selected (1)")).toBeVisible();
+  await expect(dialog.getByText("Fetched (15)")).toBeVisible();
+  await expect(dialog.getByText("Rust in the kernel, one year in")).toHaveCount(
+    2,
+  );
+  await expect(dialog.getByText("Sample article 0")).toHaveCount(1);
+});
+
+test("an item is picked on its summary alone, and a summary-less source still works", async ({
+  page,
+  request,
+}) => {
+  // "Amsterdam" appears only in the canned summary, never in a title.
+  const bySummary = await seedFeed(request, {
+    title: "By summary",
+    preferences: "amsterdam",
+    sourceHost: "blogs.example.com",
+  });
+  expect((await request.post(`/api/feeds/${String(bySummary)}/run`)).ok()).toBe(
+    true,
+  );
+  await page.goto(`/feeds/${String(bySummary)}`);
+  await expect(page.getByText("A quiet year for the platform")).toBeVisible();
+
+  // The "plain" host serves items with no summary at all: still fetched, still judged.
+  const plain = await seedFeed(request, {
+    title: "Plain",
+    preferences: "rust",
+    sourceHost: "plain.example.com",
+  });
+  expect((await request.post(`/api/feeds/${String(plain)}/run`)).ok()).toBe(
+    true,
+  );
+  await page.goto(`/feeds/${String(plain)}`);
+  await expect(page.getByText("Rust in the kernel, one year in")).toBeVisible();
+  await expect(page.getByText("A quiet year for the platform")).toBeHidden();
+});
+
+test("re-fetching an unchanged source re-judges nothing", async ({
+  request,
+}) => {
+  const id = await seedFeed(request, {
+    title: "Stable",
+    preferences: "rust",
+    sourceHost: "blogs.example.com",
+  });
+  const path = `/api/feeds/${String(id)}`;
+  expect((await request.post(`${path}/run`)).ok()).toBe(true);
+  const first = feedItemListSchema.parse(
+    await (await request.get(`${path}/items`)).json(),
+  );
+
+  expect((await request.post(`${path}/run`)).ok()).toBe(true);
+  const second = feedItemListSchema.parse(
+    await (await request.get(`${path}/items`)).json(),
+  );
+
+  // Same rows, same ids: the second run upserted the reused verdicts instead of
+  // inserting (and re-judging) anything.
+  expect(second.items.map((item) => item.id)).toEqual(
+    first.items.map((item) => item.id),
+  );
+  const detail = feedDetailSchema.parse(await (await request.get(path)).json());
+  expect(detail.sources[0]).toMatchObject({
+    fetchedCount: 15,
+    selectedCount: 1,
+  });
 });
 
 test("deleting a feed removes it from the overview", async ({
