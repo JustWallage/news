@@ -3,14 +3,19 @@ import { Link, useParams } from "react-router";
 import { FeedItemRow } from "@/components/FeedItemRow";
 import { buttonVariants } from "@/components/ui/button";
 import { useCachedFetch } from "@/hooks/useCachedFetch";
+import { useRecordOpen } from "@/hooks/useRecordOpen";
 import { cn } from "@/lib/utils";
 
 export function FeedArchivePage() {
   const params = useParams();
   const feedId = Number(params.feedId);
-  const { data, loading, error } = useCachedFetch(
+  const { data, loading, error, mutate } = useCachedFetch(
     `/api/feeds/${String(feedId)}/archive`,
     feedItemListSchema,
+  );
+  const recordOpen = useRecordOpen(
+    `/api/feeds/${String(feedId)}/items`,
+    mutate,
   );
 
   if (!Number.isInteger(feedId) || feedId <= 0) {
@@ -40,7 +45,12 @@ export function FeedArchivePage() {
       ) : (
         <ol className="list-none">
           {items.map((item, index) => (
-            <FeedItemRow key={item.id} item={item} rank={index + 1} />
+            <FeedItemRow
+              key={item.id}
+              item={item}
+              rank={index + 1}
+              onOpen={recordOpen}
+            />
           ))}
         </ol>
       )}

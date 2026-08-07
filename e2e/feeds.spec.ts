@@ -242,6 +242,35 @@ test("each source card shows its counts and opens the fetched/selected lists", a
   await expect(dialog.getByText("Sample article 0")).toHaveCount(1);
 });
 
+test("an opened item greys out on the feed and stays grey in the archive", async ({
+  page,
+  request,
+}) => {
+  const id = await seedFeed(request, {
+    title: "Readable",
+    preferences: "rust",
+    sourceHost: "blogs.example.com",
+  });
+  expect((await request.post(`/api/feeds/${String(id)}/run`)).ok()).toBe(true);
+
+  const title = "Rust in the kernel, one year in";
+  await page.goto(`/feeds/${String(id)}`);
+  const link = page.getByRole("link", { name: title });
+  await expect(link).not.toHaveClass(/text-muted-foreground/);
+
+  const open = page.waitForResponse(
+    (r) => r.url().includes("/open") && r.request().method() === "POST",
+  );
+  await link.click();
+  await open;
+  await expect(link).toHaveClass(/text-muted-foreground/);
+
+  await page.goto(`/feeds/${String(id)}/archive`);
+  await expect(page.getByRole("link", { name: title })).toHaveClass(
+    /text-muted-foreground/,
+  );
+});
+
 test("an item is picked on its summary alone, and a summary-less source still works", async ({
   page,
   request,

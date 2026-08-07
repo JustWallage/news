@@ -30,6 +30,8 @@ boundary. Change the schema here FIRST; both sides follow via `z.infer`.
   added source is 0/0), and `feedSourceItemSchema` (= `feedItemSchema` +
   `selected`) backs `GET /api/feeds/:id/sources/:sourceId/items`. The stored item
   description is NOT in any contract — it exists only to feed the AI prompt.
+  `feedItemSchema.openedAt` is the read stamp (the `storySchema.openedAt` twin)
+  every feed-item list carries so a read row renders greyed.
 
 No imports from worker/ or src/ — this folder must stay dependency-free
 (zod only) since both tsconfig projects include it.

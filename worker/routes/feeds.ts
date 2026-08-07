@@ -29,6 +29,7 @@ import {
   loadFeeds,
   loadSourceCounts,
   loadSourceItems,
+  markFeedItemOpened,
   removeFeedSource,
   runFeedFetch,
   updateFeed,
@@ -240,6 +241,27 @@ feedsRoutes.get("/:id/items", async (c) => {
       lastFetchedAt: feed.lastFetchedAt?.toISOString() ?? null,
     }),
   );
+});
+
+// Record the first time the user opens an item; idempotent (later opens no-op).
+feedsRoutes.post("/:id/items/:itemId/open", async (c) => {
+  const feed = await requireFeed(c);
+  if (feed instanceof Response) {
+    return feed;
+  }
+  const itemId = Number(c.req.param("itemId"));
+  if (!Number.isInteger(itemId) || itemId <= 0) {
+    return c.json({ error: "Invalid item id" }, 400);
+  }
+  const found = await markFeedItemOpened(
+    getDb(c.env),
+    feed.id,
+    itemId,
+    new Date(),
+  );
+  return found
+    ? c.json({ ok: true })
+    : c.json({ error: "Item not found" }, 404);
 });
 
 feedsRoutes.get("/:id/archive", async (c) => {

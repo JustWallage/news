@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router";
 import { FeedItemRow } from "@/components/FeedItemRow";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { useCachedFetch } from "@/hooks/useCachedFetch";
+import { useRecordOpen } from "@/hooks/useRecordOpen";
 import { ApiRequestError, apiFetch } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -16,6 +17,7 @@ export function FeedPage() {
     itemsPath,
     feedItemListSchema,
   );
+  const recordOpen = useRecordOpen(itemsPath, mutate);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
 
@@ -95,7 +97,12 @@ export function FeedPage() {
         <>
           <ol className="list-none">
             {items.map((item, index) => (
-              <FeedItemRow key={item.id} item={item} rank={index + 1} />
+              <FeedItemRow
+                key={item.id}
+                item={item}
+                rank={index + 1}
+                onOpen={recordOpen}
+              />
             ))}
           </ol>
           {data?.lastFetchedAt != null && (

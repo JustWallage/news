@@ -24,7 +24,7 @@ export const stories = sqliteTable("stories", {
 // Per-user curation: which cached stories were selected for a user, and whether
 // they are in that user's CURRENT feed. A digest run flips every row for the
 // user to current=false, then upserts the freshly selected ones to current=true
-// (preserving openedAt). Older rows stay as the user's archive.
+// (preserving openedAt and lastShownAt).
 export const curations = sqliteTable(
   "curations",
   {
@@ -39,6 +39,11 @@ export const curations = sqliteTable(
     curatedAt: integer("curated_at", { mode: "timestamp" }).notNull(),
     current: integer("current", { mode: "boolean" }).notNull(),
     openedAt: integer("opened_at", { mode: "timestamp" }),
+    // The last run in which this story was in the user's feed. Sticky: a later
+    // run that judges the story irrelevant leaves it, so it is the archive's
+    // "was ever shown" marker AND its ordering key. `relevant` cannot answer
+    // that — it is re-derived against the current preferences every run.
+    lastShownAt: integer("last_shown_at", { mode: "timestamp" }),
   },
   (t) => [primaryKey({ columns: [t.userEmail, t.storyId] })],
 );
@@ -129,8 +134,9 @@ export const feedSources = sqliteTable(
 
 // Fetched RSS items with their AI verdict inline (feeds are single-owner, so no
 // join table): `relevant`/`pref_version` mirror `curations`' sticky-verdict
-// reuse, `current` marks membership of the latest fetch, and `sentAt` is the
-// send-once guard — an item is delivered to Telegram at most once, ever.
+// reuse, `current` marks membership of the latest fetch, `sentAt` is the
+// send-once guard — an item is delivered to Telegram at most once, ever — and
+// `openedAt` is the read stamp (`curations.openedAt`'s twin).
 export const feedItems = sqliteTable(
   "feed_items",
   {
@@ -152,6 +158,7 @@ export const feedItems = sqliteTable(
     prefVersion: integer("pref_version").notNull().default(0),
     current: integer("current", { mode: "boolean" }).notNull(),
     sentAt: integer("sent_at", { mode: "timestamp" }),
+    openedAt: integer("opened_at", { mode: "timestamp" }),
   },
   (t) => [uniqueIndex("feed_items_feed_id_link_idx").on(t.feedId, t.link)],
 );

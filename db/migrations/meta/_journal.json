@@ -57,6 +57,20 @@
       "when": 1785847391665,
       "tag": "0007_loving_famine",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1786095211360,
+      "tag": "0008_short_galactus",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1786096078763,
+      "tag": "0009_brown_blue_blade",
+      "breakpoints": true
     }
   ]
 }

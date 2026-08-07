@@ -50,6 +50,7 @@ export function toFeedItem(row: FeedItemRow): FeedItem {
     publishedAt:
       row.publishedAt === null ? null : row.publishedAt.toISOString(),
     relevanceScore: row.relevanceScore,
+    openedAt: row.openedAt === null ? null : row.openedAt.toISOString(),
   });
 }
 

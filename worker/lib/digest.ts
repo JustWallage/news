@@ -56,9 +56,9 @@ export interface AiFilter {
 const UNFILTERED_FALLBACK = 30;
 
 // D1 caps a query at 100 bound parameters, so multi-row inserts are chunked to
-// stay under it: stories have 8 columns, curations 9 → 10 rows/insert is safe.
+// stay under it: stories have 8 columns → 10 rows, curations 10 → 9 rows.
 const STORY_CHUNK = 10;
-const CURATION_CHUNK = 10;
+const CURATION_CHUNK = 9;
 
 // Rate-limit the upstream HN fetch: within this window of the last fetch, reuse
 // the cached front-page snapshot instead of hitting HN again.
@@ -295,7 +295,8 @@ export async function curateForUser(
 
   // Recompute this user's feed: drop everyone out, then upsert every evaluated
   // candidate, marking current = relevant. Stories not on the current front page
-  // keep their row but leave the feed. openedAt survives (not in the update set).
+  // keep their row but leave the feed. openedAt survives (not in the update set);
+  // lastShownAt only moves forward for the stories that made this feed.
   await db
     .update(curations)
     .set({ current: false })
@@ -314,6 +315,7 @@ export async function curateForUser(
           curatedAt: e.curatedAt,
           current: e.relevant,
           openedAt: null,
+          lastShownAt: e.relevant ? now : null,
         })),
       )
       .onConflictDoUpdate({
@@ -325,6 +327,10 @@ export async function curateForUser(
           prefVersion: sql`excluded.pref_version`,
           curatedAt: sql`excluded.curated_at`,
           current: sql`excluded.current`,
+          // excluded.last_shown_at is `now` for a story in this feed and NULL
+          // otherwise, so COALESCE advances it only on a run that showed the
+          // story and keeps the prior stamp on every other run.
+          lastShownAt: sql`COALESCE(excluded.last_shown_at, ${curations.lastShownAt})`,
         },
       });
   }
