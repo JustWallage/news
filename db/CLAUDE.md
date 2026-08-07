@@ -21,11 +21,15 @@ Rules:
   latest `fetchedAt` is < 5 min old, in which case the run reuses that cached
   snapshot instead of fetching (see worker/CLAUDE.md `RATE_LIMIT_MS`).
 - `curations` is PER-USER (composite PK `userEmail, storyId`), the feed/archive
-  join table. `current` marks the live feed (older rows are the archive);
-  `relevant` is the sticky AI verdict (persisted even when false, so a re-run can
-  skip it); `pref_version` is the `preferences.version` the verdict was produced
-  against. `current = true` implies `relevant` (see worker/CLAUDE.md for the
-  digest's version-skip rule).
+  join table. `current` marks the live feed; `relevant` is the sticky AI verdict
+  (persisted even when false, so a re-run can skip it); `pref_version` is the
+  `preferences.version` the verdict was produced against. `current = true`
+  implies `relevant` (see worker/CLAUDE.md for the digest's version-skip rule).
+  `last_shown_at` = the last run in which the story was in that user's feed, and
+  it is THE archive column: non-null = ever shown, and it is the sort key
+  (newest first). It only ever moves forward — a story re-judged irrelevant
+  keeps its stamp, and a curated-but-never-relevant story never gets one, so
+  those never reach the archive. `opened_at` is the read stamp (first open only).
 - `preferences.version` is a monotonic counter bumped on every real edit (not on
   a no-op resave); the digest stamps it onto each curation as `pref_version`.
 - `telegram` is PER-USER (PK `userEmail`, unique `chatId`): the chat link
@@ -44,6 +48,8 @@ Rules:
   `current` = member of the latest fetch AND relevant, unique `(feed_id, link)`
   dedupes across fetches and sources. `sent_at` is the send-once Telegram guard:
   stamped when the item is delivered, never re-sent, preserved by the upsert.
+  `feed_items.opened_at` is the read stamp (the twin of `curations.opened_at`):
+  set on the user's FIRST open, never cleared, also preserved by the upsert.
   **`current` does NOT gate delivery** — the Telegram queue is
   `relevant AND sent_at IS NULL` (see worker/CLAUDE.md); `current` is the web
   feed's live-membership flag alone.

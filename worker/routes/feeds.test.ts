@@ -193,6 +193,66 @@ describe("feeds api", () => {
     expect(archive.items).toHaveLength(1);
   });
 
+  it("stamps the first open of an item and keeps it across refetches", async () => {
+    const id = await createFeed();
+    const path = `/api/feeds/${String(id)}`;
+    await app.request(
+      path,
+      json("PUT", { title: "My feed", preferencesText: "rust" }),
+      env,
+    );
+    await app.request(
+      `${path}/sources`,
+      json("POST", { url: "https://blogs.example.com/feed" }),
+      env,
+    );
+    await app.request(`${path}/run`, json("POST", {}), env);
+    const loadItems = async (): Promise<{ id: number; openedAt: string }[]> =>
+      (
+        await (
+          await app.request(`${path}/items`, get, env)
+        ).json<{ items: { id: number; openedAt: string }[] }>()
+      ).items;
+
+    const [item] = await loadItems();
+    expect(item?.openedAt).toBeNull();
+    if (item === undefined) {
+      return;
+    }
+
+    const openPath = `${path}/items/${String(item.id)}/open`;
+    expect((await app.request(openPath, json("POST", {}), env)).status).toBe(
+      200,
+    );
+    const opened = (await loadItems())[0]?.openedAt;
+    expect(opened).not.toBeNull();
+
+    // A second open is a no-op, and a refetch must not clear the stamp.
+    expect((await app.request(openPath, json("POST", {}), env)).status).toBe(
+      200,
+    );
+    await app.request(`${path}/run`, json("POST", {}), env);
+    expect((await loadItems())[0]?.openedAt).toBe(opened);
+
+    expect(
+      (await app.request(`${path}/items/999999/open`, json("POST", {}), env))
+        .status,
+    ).toBe(404);
+    expect(
+      (await app.request(`${path}/items/abc/open`, json("POST", {}), env))
+        .status,
+    ).toBe(400);
+    const foreign = await app.request(
+      openPath,
+      {
+        method: "POST",
+        headers: { ...authHeaders, "X-Test-User-Email": "other@example.test" },
+      },
+      env,
+    );
+    expect(foreign.status).toBe(404);
+  });
+
   it("reports per-source counts and lists that source's items", async () => {
     const id = await createFeed();
     const path = `/api/feeds/${String(id)}`;

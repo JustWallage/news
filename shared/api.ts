@@ -156,6 +156,8 @@ export const feedItemSchema = z.object({
   publishedAt: z.iso.datetime().nullable(),
   /** 0–100 relevance from the AI filter (0 for the empty-preferences fallback). */
   relevanceScore: z.int(),
+  /** When the user first opened this item; null until opened. */
+  openedAt: z.iso.datetime().nullable(),
 });
 export type FeedItem = z.infer<typeof feedItemSchema>;
 

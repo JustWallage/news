@@ -14,7 +14,7 @@ import type { AiFilter, DigestResult } from "./digest";
 import type { ParsedFeedItem, RssClient } from "./rss";
 
 // D1 caps a query at 100 bound parameters; feed_items upserts bind 11 columns
-// (sentAt is preserved by omission) → 9 rows/insert stays under it.
+// (sentAt and openedAt are preserved by omission) → 9 rows/insert stays under it.
 const ITEM_CHUNK = 9;
 const PAGE_SIZE = 20;
 // The settings drill-down lists one source's items; a long-lived source
@@ -299,7 +299,8 @@ export async function runFeedFetch(
       )
       .onConflictDoUpdate({
         target: [feedItems.feedId, feedItems.link],
-        // sentAt is deliberately absent: the send-once stamp survives refetches.
+        // sentAt/openedAt are deliberately absent: the send-once stamp and the
+        // read stamp survive refetches.
         set: {
           sourceId: sql`excluded.source_id`,
           title: sql`excluded.title`,
@@ -381,6 +382,33 @@ export async function loadUnsentFeedItems(
       ),
     )
     .orderBy(...sendOrder);
+}
+
+// Stamps the first open of one item (the feed twin of `curations.openedAt`);
+// later opens no-op. False means the item is not in this feed, so the caller
+// can 404 it.
+export async function markFeedItemOpened(
+  db: Db,
+  feedId: number,
+  itemId: number,
+  now: Date,
+): Promise<boolean> {
+  const rows = await db
+    .select()
+    .from(feedItems)
+    .where(and(eq(feedItems.feedId, feedId), eq(feedItems.id, itemId)))
+    .limit(1);
+  const row = rows[0];
+  if (row === undefined) {
+    return false;
+  }
+  if (row.openedAt === null) {
+    await db
+      .update(feedItems)
+      .set({ openedAt: now })
+      .where(eq(feedItems.id, itemId));
+  }
+  return true;
 }
 
 /** One source's items, newest first, for the settings drill-down. */

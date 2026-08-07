@@ -140,7 +140,8 @@ no `ENVIRONMENT`/`isTest` checks leak into logic, and there is no test-only rout
   (title + domain + summary; the AI pass runs BEFORE the upsert with synthetic
   array-index ids — new items have no DB id yet), then one write pass sets
   `current = relevant`. Empty prefs → everything relevant, AI-free. The upsert
-  never touches `sentAt` (send-once survives refetches). Each row is attributed
+  never touches `sentAt`/`openedAt` (send-once and read state survive refetches).
+  Each row is attributed
   to the FIRST source of the run carrying its link (`feed_items.source_id`) —
   the same winner as the dedupe, since `loadFeedSources` orders by creation.
 - `lib/ai.ts`: `FEED_SYSTEM_PROMPT` is a separate prompt over the SAME
@@ -158,7 +159,9 @@ no `ENVIRONMENT`/`isTest` checks leak into logic, and there is no test-only rout
   `GET /:id` carries per-source `fetchedCount`/`selectedCount` from
   `loadSourceCounts` — ONE aggregate query (group by source + verdict), never
   N+1; `GET /:id/sources/:sourceId/items` backs the settings drill-down (newest
-  100, each with `selected`).
+  100, each with `selected`). `POST /:id/items/:itemId/open` (`markFeedItemOpened`)
+  is the feeds twin of `POST /api/stories/:id/open`: first open only, 404 for an
+  item outside the feed.
 - **`current` and send eligibility answer different questions.** `current` =
   member of the latest fetch AND relevant, and drives the WEB feed only
   (`loadFeedItems`). The Telegram queue (`loadUnsentFeedItems`) is
@@ -212,7 +215,9 @@ prefVersion, userEmail, now)` then, per user, reuses curations
   already judged at `prefVersion` and AI-filter ONLY the candidates not yet
   judged at it → set `current=false` for the user, then upsert EVERY evaluated
   candidate (relevant and not) with `pref_version=prefVersion` and
-  `current=relevant` (preserving `openedAt`). Re-evaluation is scoped to the
+  `current=relevant` (preserving `openedAt`, and advancing `lastShownAt` to `now`
+  ONLY for the relevant ones — `COALESCE(excluded.last_shown_at, …)` keeps the
+  prior stamp otherwise). Re-evaluation is scoped to the
   current front page; older off-front-page curations are never re-evaluated.
   Empty prefs → AI-free top-30-by-score fallback, always recomputed (no skip).
   `loadPreferences` returns `{ text, version }`; `count` = relevant candidates.
@@ -234,10 +239,15 @@ prefVersion, userEmail, now)` then, per user, reuses curations
 - Two platform limits shape the writes: Workers Free caps **subrequests at 50**
   (hence one front-page request, not 1+N item fetches), and D1 caps a query at
   **100 bound parameters** — so the multi-row upserts are CHUNKED
-  (`STORY_CHUNK`/`CURATION_CHUNK` = 10 rows; curations now bind 9 cols → 90 < 100).
+  (`STORY_CHUNK` = 10 rows × 8 cols; `CURATION_CHUNK` = 9 rows × 10 cols → 90 < 100).
   A single giant insert passes miniflare locally but fails on real D1; don't
   switch back.
-- Feed = `curations` joined to `stories` where `userEmail = me AND current`.
+- Feed = `curations` joined to `stories` where `userEmail = me AND current`
+  (`loadFeed`), best relevance first. Archive = the same join where
+  `lastShownAt IS NOT NULL` (`loadArchive`) — every story EVER shown, the current
+  feed included, ordered `lastShownAt DESC` then the feed order within a run.
+  It is NOT `current = false`: that set also holds candidates the AI rejected,
+  which were never shown to anyone.
   Identity comes ONLY from `c.get("userEmail")` (set by `middleware/auth.ts`);
   routes never read auth headers/cookies.
 - `POST /api/digest/run` (homepage Refresh + e2e) runs the digest for the current

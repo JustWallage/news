@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { curations, stories } from "../../db/schema";
 import { getDb } from "./db";
 import { runDigest, type AiFilter, type StoryInput } from "./digest";
+import { loadArchive } from "./feed";
 import type { HnClient } from "./hn";
 
 const FRONT: StoryInput[] = [
@@ -172,6 +173,33 @@ describe("runDigest", () => {
       .where(and(eq(curations.userEmail, USER), eq(curations.storyId, 1)));
     expect(archived[0]?.current).toBe(false);
     expect(archived[0]?.openedAt).not.toBeNull();
+    // Sticky: story 1 keeps the run that last showed it, so the archive still
+    // has it even though it is now judged irrelevant.
+    expect(archived[0]?.relevant).toBe(false);
+    expect(archived[0]?.lastShownAt).toEqual(t0);
+
+    const shown = await loadArchive(db, USER);
+    expect(shown.map((s) => s.id)).toEqual([2, 1]);
+  });
+
+  it("keeps a story the AI never picked out of the archive", async () => {
+    const db = getDb(env);
+    await runDigest(
+      db,
+      { hn: countingHn().hn, ai: keywordFilter("rust") },
+      "rust",
+      1,
+      USER,
+      new Date("2026-06-17T06:20:00Z"),
+    );
+
+    const judged = await db
+      .select()
+      .from(curations)
+      .where(and(eq(curations.userEmail, USER), eq(curations.storyId, 2)));
+    expect(judged[0]?.relevant).toBe(false);
+    expect(judged[0]?.lastShownAt).toBeNull();
+    expect((await loadArchive(db, USER)).map((s) => s.id)).toEqual([1]);
   });
 
   it("isolates feeds per user", async () => {

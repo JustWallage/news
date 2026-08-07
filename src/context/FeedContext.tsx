@@ -1,6 +1,5 @@
 import {
   digestRunResultSchema,
-  okSchema,
   storyListSchema,
   type StoryList,
 } from "@shared/api";
@@ -12,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { useCachedFetch } from "@/hooks/useCachedFetch";
+import { useRecordOpen } from "@/hooks/useRecordOpen";
 import { apiFetch } from "@/lib/api";
 
 interface FeedValue {
@@ -54,17 +54,7 @@ export function FeedProvider({ children }: { children: ReactNode }) {
       });
   }, [mutate]);
 
-  const recordOpen = useCallback(
-    (id: number) => {
-      // The link opens in a new tab regardless; revalidate so the row greys.
-      apiFetch(`/api/stories/${id}/open`, okSchema, { method: "POST" })
-        .then(() => {
-          mutate();
-        })
-        .catch(() => undefined);
-    },
-    [mutate],
-  );
+  const recordOpen = useRecordOpen("/api/stories", mutate);
 
   return (
     <FeedContext.Provider

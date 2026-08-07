@@ -29,14 +29,21 @@
 - `StoryRow` links go through `safeHref` (`lib/format.ts`): only http(s) story
   URLs are used as the anchor target, else it falls back to the HN item page —
   React does not block dangerous href schemes, so never bind `story.url` raw.
-- Opening a story title fires a fire-and-forget `POST /api/stories/:id/open`
-  while the browser follows the link (new tab) — best effort, never blocks nav.
+- Opening a title fires a fire-and-forget `POST <base>/:id/open` via
+  `useRecordOpen(basePath, mutate)` while the browser follows the link (new tab)
+  — best effort, never blocks nav. A read row (`openedAt !== null`) renders
+  `text-muted-foreground` in both `StoryRow` and `FeedItemRow`. Each list passes
+  ITS OWN `mutate` (HN feed, HN archive, feed items, feed archive are separate
+  cache entries), so the clicked row greys in place instead of waiting for a
+  reload; the feeds base path is always `/api/feeds/:feedId/items`, archive
+  included.
 - PreferencesPage seeds the textarea from the server only while it is pristine
   (a `dirty` ref), so a background revalidate can't clobber what is being typed.
 - Layout is the plain Hacker-News-style list (orange header, ranked rows).
-  Routes: `/` (HomePage, current feed), `/archive` (ArchivePage, displaced
-  curations via `GET /api/stories/archive` — its own `useCachedFetch`, NOT in
-  `FeedContext`), `/preferences` (PreferencesPage).
+  Routes: `/` (HomePage, current feed), `/archive` (ArchivePage — every story
+  ever shown, current feed included, most recently shown first, via
+  `GET /api/stories/archive`; its own `useCachedFetch`, NOT in `FeedContext`),
+  `/preferences` (PreferencesPage).
 - PreferencesPage's `TelegramSection` reads `/api/telegram` status (shows the
   connected chat label), POSTs `/api/telegram/link-code` to reveal a
   `/start <code>` connect code, and POSTs `/api/telegram/test` for the Send test
