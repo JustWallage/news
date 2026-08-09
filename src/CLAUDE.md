@@ -67,7 +67,9 @@
   counts) whose body is a button opening `SourceItemsDialog` — a Base UI
   `Dialog` (same hand-rolled pattern as `ConfirmDialog`, which uses
   `AlertDialog`) that reads `GET /api/feeds/:id/sources/:sourceId/items` and is
-  mounted only while open, so the fetch follows the click.
+  mounted only while open, so the fetch follows the click. Removing a source
+  goes through a `ConfirmDialog` first (one dialog for the page, keyed off a
+  `removeSourceId` state), as does deleting the feed.
   `FeedItemRow` is the lean item
   row (`StoryRow` is HN-shaped — don't reuse it). `SlotTimesEditor` is the
   shared three-time-inputs editor (TelegramSection + feed settings); parents
