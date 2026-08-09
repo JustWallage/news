@@ -59,6 +59,7 @@ export function FeedSettingsPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [openSourceId, setOpenSourceId] = useState<number | null>(null);
+  const [removeSourceId, setRemoveSourceId] = useState<number | null>(null);
 
   // Seed the editors from the server only while pristine, so a background
   // revalidate can never clobber what the user is typing.
@@ -157,6 +158,7 @@ export function FeedSettingsPage() {
 
   const sources = data?.sources ?? [];
   const openSource = sources.find((source) => source.id === openSourceId);
+  const sourceToRemove = sources.find((source) => source.id === removeSourceId);
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-2">
@@ -256,7 +258,7 @@ export function FeedSettingsPage() {
                       size="sm"
                       aria-label={`Remove ${source.title}`}
                       onClick={() => {
-                        removeSource(source.id);
+                        setRemoveSourceId(source.id);
                       }}
                     >
                       Remove
@@ -363,6 +365,23 @@ export function FeedSettingsPage() {
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={sourceToRemove !== undefined}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRemoveSourceId(null);
+          }
+        }}
+        title={`Remove ${sourceToRemove?.title ?? "this source"}?`}
+        description="This feed stops fetching from it. Items it already contributed stay in the archive until the next refresh drops them from the feed."
+        confirmLabel="Yes, remove"
+        onConfirm={() => {
+          if (sourceToRemove !== undefined) {
+            removeSource(sourceToRemove.id);
+          }
+        }}
+      />
 
       <ConfirmDialog
         open={confirmDelete}

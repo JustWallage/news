@@ -148,6 +148,34 @@ test("a failing source URL surfaces an error and stores nothing", async ({
   await expect(page.getByText("No sources yet.")).toBeVisible();
 });
 
+test("removing a source is confirmed first, and cancelling keeps it", async ({
+  page,
+  request,
+}) => {
+  const id = await seedFeed(request, {
+    title: "Second thoughts",
+    sourceHost: "blogs.example.com",
+  });
+  await page.goto(`/feeds/${String(id)}/settings`);
+
+  const card = page.getByRole("button", {
+    name: "Items from Fake Feed (blogs.example.com)",
+  });
+  const removeButton = page.getByRole("button", {
+    name: "Remove Fake Feed (blogs.example.com)",
+  });
+  await expect(card).toBeVisible();
+
+  await removeButton.click();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(card).toBeVisible();
+
+  await removeButton.click();
+  await page.getByRole("button", { name: "Yes, remove" }).click();
+
+  await expect(page.getByText("No sources yet.")).toBeVisible();
+});
+
 test("telegram slots are offered only once a chat is linked", async ({
   page,
   request,
